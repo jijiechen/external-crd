@@ -17,6 +17,7 @@ limitations under the License.
 package controllers
 
 import (
+	k8sjijiechencomv1 "github.com/jijiechen/external-crd/pkg/api/v1"
 	"path/filepath"
 	"testing"
 
@@ -29,8 +30,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/envtest/printer"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
-
-	k8sjijiechencomv1 "github.com/jijiechen/external-crd/api/v1"
 	//+kubebuilder:scaffold:imports
 )
 
