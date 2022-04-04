@@ -35,7 +35,7 @@ var (
 	// regex matches "/apis/xxx.clusternet.io/{version}/{path}"
 	kcrdAPIsRegex = regexp.MustCompile(`^(/apis/\w*\.jijiechen\.com/v\w*.)/(.*)`)
 
-	// overlayGV represents current overlay GroupVersion
+	// overlayGV represents current overlay SchemeGroupVersion
 	overlayGV = overlayapi.SchemeGroupVersion.String()
 )
 

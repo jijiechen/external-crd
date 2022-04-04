@@ -37,15 +37,12 @@ type KubernetesCrd struct {
 	Manifest runtime.RawExtension `json:"manifest"`
 }
 
-//+kubebuilder:object:root=true
+// +kubebuilder:object:root=true
+// +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
 // KubernetesCrdList contains a list of KubernetesCrd
 type KubernetesCrdList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`
 	Items           []KubernetesCrd `json:"items"`
-}
-
-func init() {
-	SchemeBuilder.Register(&KubernetesCrd{}, &KubernetesCrdList{})
 }

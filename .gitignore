@@ -23,3 +23,10 @@ testbin/*
 *.swp
 *.swo
 *~
+
+# Jetbrains
+.idea
+
+# go vendor
+vendor
+

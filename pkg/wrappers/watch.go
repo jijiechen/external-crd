@@ -25,7 +25,7 @@ import (
 )
 
 const (
-	defaultSize = 5
+	DefaultWatchSize = 5
 )
 
 type FixupFunc func(runtime.Object) runtime.Object

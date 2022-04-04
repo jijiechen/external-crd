@@ -37,7 +37,7 @@ func TestTransformManifest(t *testing.T) {
 		{
 			manifest: &kcrd.KubernetesCrd{
 				TypeMeta: metav1.TypeMeta{
-					APIVersion: kcrd.GroupVersion.String(),
+					APIVersion: kcrd.SchemeGroupVersion.String(),
 					Kind:       kcrd.Kind("Manifest").String(),
 				},
 				ObjectMeta: metav1.ObjectMeta{

@@ -37,13 +37,13 @@ import (
 	clusterapi "github.com/clusternet/clusternet/pkg/apis/clusters/v1beta1"
 	"github.com/clusternet/clusternet/pkg/controllers/clusters/clusterlifecycle"
 	"github.com/clusternet/clusternet/pkg/features"
-	clusternet "github.com/clusternet/clusternet/pkg/generated/clientset/versioned"
-	informers "github.com/clusternet/clusternet/pkg/generated/informers/externalversions"
 	"github.com/clusternet/clusternet/pkg/hub/approver"
 	"github.com/clusternet/clusternet/pkg/hub/deployer"
 	"github.com/clusternet/clusternet/pkg/hub/options"
 	"github.com/clusternet/clusternet/pkg/known"
 	"github.com/clusternet/clusternet/pkg/utils"
+	clusternet "github.com/jijiechen/external-crd/pkg/generated/clientset/versioned"
+	informers "github.com/jijiechen/external-crd/pkg/generated/informers/externalversions"
 )
 
 const (

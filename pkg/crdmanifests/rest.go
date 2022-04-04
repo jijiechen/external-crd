@@ -45,9 +45,9 @@ import (
 	clientgorest "k8s.io/client-go/rest"
 	"k8s.io/klog/v2"
 
-	clusternet "github.com/clusternet/clusternet/pkg/generated/clientset/versioned"
-	applisters "github.com/clusternet/clusternet/pkg/generated/listers/apps/v1alpha1"
 	kcrd "github.com/jijiechen/external-crd/pkg/apis/kcrd/v1alpha1"
+	kcrdclientset "github.com/jijiechen/external-crd/pkg/generated/clientset/versioned"
+	applisters "github.com/jijiechen/external-crd/pkg/generated/listers/kcrd/v1alpha1"
 	"github.com/jijiechen/external-crd/pkg/known"
 )
 
@@ -76,9 +76,9 @@ type REST struct {
 
 	parameterCodec runtime.ParameterCodec
 
-	dryRunClient     clientgorest.Interface
-	clusternetClient *clusternet.Clientset
-	manifestLister   applisters.ManifestLister
+	dryRunClient clientgorest.Interface
+	kcrdClient   *kcrdclientset.Clientset
+	kcrdLister   applisters.KubernetesCrdLister
 
 	// deleteCollectionWorkers is the maximum number of workers in a single
 	// DeleteCollection call. Delete requests for the items in a collection
@@ -117,7 +117,7 @@ func (r *REST) Create(ctx context.Context, obj runtime.Object, createValidation 
 	manifest.Labels[known.ConfigKindLabel] = r.kind
 	manifest.Labels[known.ConfigNameLabel] = result.GetName()
 	manifest.Labels[known.ConfigNamespaceLabel] = result.GetNamespace()
-	manifest, err = r.clusternetClient.AppsV1alpha1().Manifests(manifest.Namespace).Create(ctx, manifest, metav1.CreateOptions{})
+	manifest, err = r.kcrdClient.KcrdV1alpha1().KubernetesCrds(manifest.Namespace).Create(ctx, manifest, metav1.CreateOptions{})
 	if err != nil {
 		if errors.IsAlreadyExists(err) {
 			return nil, errors.NewAlreadyExists(schema.GroupResource{Group: r.group, Resource: r.name}, result.GetName())
@@ -132,9 +132,9 @@ func (r *REST) Get(ctx context.Context, name string, options *metav1.GetOptions)
 	var manifest *kcrd.KubernetesCrd
 	var err error
 	if len(options.ResourceVersion) == 0 {
-		manifest, err = r.manifestLister.Manifests(r.reservedNamespace).Get(r.getNormalizedManifestName(request.NamespaceValue(ctx), name))
+		manifest, err = r.kcrdLister.KubernetesCrds(r.reservedNamespace).Get(r.getNormalizedManifestName(request.NamespaceValue(ctx), name))
 	} else {
-		manifest, err = r.clusternetClient.AppsV1alpha1().Manifests(r.reservedNamespace).
+		manifest, err = r.kcrdClient.KcrdV1alpha1().KubernetesCrds(r.reservedNamespace).
 			Get(ctx, r.getNormalizedManifestName(request.NamespaceValue(ctx), name), *options)
 	}
 	if err != nil {
@@ -164,7 +164,7 @@ func (r *REST) Update(ctx context.Context, name string, objInfo rest.UpdatedObje
 		return nil, false, err
 	}
 
-	manifest, err := r.manifestLister.Manifests(r.reservedNamespace).Get(r.getNormalizedManifestName(request.NamespaceValue(ctx), name))
+	manifest, err := r.kcrdLister.KubernetesCrds(r.reservedNamespace).Get(r.getNormalizedManifestName(request.NamespaceValue(ctx), name))
 	if err != nil {
 		if errors.IsNotFound(err) {
 			return nil, false, errors.NewNotFound(schema.GroupResource{Group: r.group, Resource: r.name}, name)
@@ -173,7 +173,7 @@ func (r *REST) Update(ctx context.Context, name string, objInfo rest.UpdatedObje
 	}
 
 	oldObj := &unstructured.Unstructured{}
-	if err = json.Unmarshal(manifest.Template.Raw, oldObj); err != nil {
+	if err = json.Unmarshal(manifest.Manifest.Raw, oldObj); err != nil {
 		return nil, false, errors.NewInternalError(err)
 	}
 
@@ -205,10 +205,10 @@ func (r *REST) Update(ctx context.Context, name string, objInfo rest.UpdatedObje
 	}
 	manifestCopy.Labels[known.ConfigNameLabel] = result.GetName()
 	manifestCopy.Labels[known.ConfigNamespaceLabel] = result.GetNamespace()
-	manifestCopy.Template.Reset()
-	manifestCopy.Template.Object = result
+	manifestCopy.Manifest.Reset()
+	manifestCopy.Manifest.Object = result
 	// save the updates
-	manifestCopy, err = r.clusternetClient.AppsV1alpha1().Manifests(r.reservedNamespace).Update(ctx, manifestCopy, *options)
+	manifestCopy, err = r.kcrdClient.KcrdV1alpha1().KubernetesCrds(r.reservedNamespace).Update(ctx, manifestCopy, *options)
 	if err != nil {
 		return nil, false, err
 	}
@@ -220,7 +220,7 @@ func (r *REST) Update(ctx context.Context, name string, objInfo rest.UpdatedObje
 // Delete removes the item from storage.
 // options can be mutated by rest.BeforeDelete due to a graceful deletion strategy.
 func (r *REST) Delete(ctx context.Context, name string, deleteValidation rest.ValidateObjectFunc, options *metav1.DeleteOptions) (runtime.Object, bool, error) {
-	err := r.clusternetClient.AppsV1alpha1().Manifests(r.reservedNamespace).
+	err := r.kcrdClient.KcrdV1alpha1().KubernetesCrds(r.reservedNamespace).
 		Delete(ctx, r.getNormalizedManifestName(request.NamespaceValue(ctx), name), *options)
 	if err != nil {
 		if errors.IsNotFound(err) {
@@ -325,7 +325,7 @@ func (r *REST) Watch(ctx context.Context, options *internalversion.ListOptions) 
 	}
 
 	klog.V(5).Infof("%v", label)
-	watcher, err := r.clusternetClient.AppsV1alpha1().Manifests(r.reservedNamespace).Watch(ctx, metav1.ListOptions{
+	watcher, err := r.kcrdClient.KcrdV1alpha1().KubernetesCrds(r.reservedNamespace).Watch(ctx, metav1.ListOptions{
 		LabelSelector:        label.String(),
 		FieldSelector:        "", // explicitly set FieldSelector to an empty string
 		Watch:                options.Watch,
@@ -352,7 +352,7 @@ func (r *REST) Watch(ctx context.Context, options *internalversion.ListOptions) 
 		}
 
 		return object
-	}, wrappers.defaultSize)
+	}, wrappers.DefaultWatchSize)
 	if err == nil {
 		go watchWrapper.Run()
 	}
@@ -366,7 +366,7 @@ func (r *REST) List(ctx context.Context, options *internalversion.ListOptions) (
 		return nil, err
 	}
 
-	manifests, err := r.clusternetClient.AppsV1alpha1().Manifests(r.reservedNamespace).List(ctx, metav1.ListOptions{
+	manifests, err := r.kcrdClient.KcrdV1alpha1().KubernetesCrds(r.reservedNamespace).List(ctx, metav1.ListOptions{
 		LabelSelector:        label.String(),
 		FieldSelector:        "", // explicitly set FieldSelector to an empty string
 		Watch:                options.Watch,
@@ -487,7 +487,7 @@ func (r *REST) normalizeRequest(req *clientgorest.Request, namespace string) *cl
 func (r *REST) getNormalizedManifestName(namespace, name string) string {
 	legacyManifestName := r.generateLegacyNameForManifest(namespace, name)
 	// backward compatible
-	_, err := r.manifestLister.Manifests(r.reservedNamespace).Get(legacyManifestName)
+	_, err := r.kcrdLister.KubernetesCrds(r.reservedNamespace).Get(legacyManifestName)
 	if err == nil {
 		return legacyManifestName
 	}
@@ -657,12 +657,12 @@ func (r *REST) getListKind() string {
 }
 
 // NewREST returns a RESTStorage object that will work against API services.
-func NewREST(dryRunClient clientgorest.Interface, clusternetclient *clusternet.Clientset, parameterCodec runtime.ParameterCodec,
-	manifestLister applisters.ManifestLister, reservedNamespace string) *REST {
+func NewREST(dryRunClient clientgorest.Interface, clusternetclient *kcrdclientset.Clientset, parameterCodec runtime.ParameterCodec,
+	manifestLister applisters.KubernetesCrdLister, reservedNamespace string) *REST {
 	return &REST{
 		dryRunClient:            dryRunClient,
-		clusternetClient:        clusternetclient,
-		manifestLister:          manifestLister,
+		kcrdClient:              clusternetclient,
+		kcrdLister:              manifestLister,
 		parameterCodec:          parameterCodec,
 		deleteCollectionWorkers: DefaultDeleteCollectionWorkers, // currently we only set a default value for deleteCollectionWorkers
 		reservedNamespace:       reservedNamespace,

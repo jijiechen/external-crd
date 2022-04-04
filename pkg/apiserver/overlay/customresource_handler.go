@@ -53,11 +53,11 @@ import (
 	"k8s.io/klog/v2"
 	apiservicelisters "k8s.io/kube-aggregator/pkg/client/listers/apiregistration/v1"
 
-	shadowapi "github.com/clusternet/clusternet/pkg/apis/overlay/v1alpha1"
-	clusternet "github.com/clusternet/clusternet/pkg/generated/clientset/versioned"
-	applisters "github.com/clusternet/clusternet/pkg/generated/listers/apps/v1alpha1"
 	"github.com/clusternet/clusternet/pkg/known"
 	"github.com/clusternet/clusternet/pkg/registry/shadow/template"
+	shadowapi "github.com/jijiechen/external-crd/pkg/apis/overlay/v1alpha1"
+	clusternet "github.com/jijiechen/external-crd/pkg/generated/clientset/versioned"
+	applisters "github.com/jijiechen/external-crd/pkg/generated/listers/apps/v1alpha1"
 )
 
 type crdHandler struct {

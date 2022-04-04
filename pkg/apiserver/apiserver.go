@@ -38,11 +38,11 @@ import (
 	proxiesinstall "github.com/clusternet/clusternet/pkg/apis/proxies/install"
 	"github.com/clusternet/clusternet/pkg/exchanger"
 	"github.com/clusternet/clusternet/pkg/features"
-	clusternet "github.com/clusternet/clusternet/pkg/generated/clientset/versioned"
-	informers "github.com/clusternet/clusternet/pkg/generated/informers/externalversions"
-	shadowapiserver "github.com/clusternet/clusternet/pkg/hub/apiserver/overlay"
 	socketstorage "github.com/clusternet/clusternet/pkg/registry/proxies/socket"
 	"github.com/clusternet/clusternet/pkg/registry/proxies/socket/subresources"
+	shadowapiserver "github.com/jijiechen/external-crd/pkg/apiserver/overlay"
+	clusternet "github.com/jijiechen/external-crd/pkg/generated/clientset/versioned"
+	informers "github.com/jijiechen/external-crd/pkg/generated/informers/externalversions"
 )
 
 var (

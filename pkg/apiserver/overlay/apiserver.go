@@ -18,6 +18,7 @@ package apiserver
 
 import (
 	"fmt"
+	"github.com/jijiechen/external-crd/pkg/crdmanifests"
 	"path"
 	"strings"
 	"time"
@@ -49,11 +50,10 @@ import (
 	apiservicelisters "k8s.io/kube-aggregator/pkg/client/listers/apiregistration/v1"
 	metricsapi "k8s.io/metrics/pkg/apis/metrics"
 
-	shadowinstall "github.com/clusternet/clusternet/pkg/apis/overlay/install"
-	shadowapi "github.com/clusternet/clusternet/pkg/apis/overlay/v1alpha1"
-	clusternet "github.com/clusternet/clusternet/pkg/generated/clientset/versioned"
-	applisters "github.com/clusternet/clusternet/pkg/generated/listers/apps/v1alpha1"
-	"github.com/clusternet/clusternet/pkg/registry/shadow/template"
+	shadowinstall "github.com/jijiechen/external-crd/pkg/apis/overlay/install"
+	shadowapi "github.com/jijiechen/external-crd/pkg/apis/overlay/v1alpha1"
+	clusternet "github.com/jijiechen/external-crd/pkg/generated/clientset/versioned"
+	applisters "github.com/jijiechen/external-crd/pkg/generated/listers/kcrd/v1alpha1"
 )
 
 var (
@@ -107,7 +107,7 @@ type ShadowAPIServer struct {
 	kubeRESTClient   restclient.Interface
 	clusternetclient *clusternet.Clientset
 
-	manifestLister   applisters.ManifestLister
+	manifestLister   applisters.KubernetesCrdLister
 	crdLister        apiextensionsv1lister.CustomResourceDefinitionLister
 	crdSynced        cache.InformerSynced
 	crdHandler       *crdHandler
@@ -121,7 +121,7 @@ func NewShadowAPIServer(apiserver *genericapiserver.GenericAPIServer,
 	maxRequestBodyBytes int64, minRequestTimeout int,
 	admissionControl admission.Interface,
 	kubeRESTClient restclient.Interface, clusternetclient *clusternet.Clientset,
-	manifestLister applisters.ManifestLister, apiserviceLister apiservicelisters.APIServiceLister,
+	manifestLister applisters.KubernetesCrdLister, apiserviceLister apiservicelisters.APIServiceLister,
 	crdInformerFactory crdinformers.SharedInformerFactory,
 	reservedNamespace string) *ShadowAPIServer {
 
@@ -203,19 +203,14 @@ func (ss *ShadowAPIServer) InstallShadowAPIGroups(stopCh <-chan struct{}, cl dis
 				&unstructured.Unstructured{},
 			)
 
-			resourceRest := template.NewREST(ss.kubeRESTClient, ss.clusternetclient, ParameterCodec, ss.manifestLister, ss.reservedNamespace)
+			resourceRest := crdmanifests.NewREST(ss.kubeRESTClient, ss.clusternetclient, ParameterCodec, ss.manifestLister, ss.reservedNamespace)
 			resourceRest.SetNamespaceScoped(apiresource.Namespaced)
 			resourceRest.SetName(apiresource.Name)
 			resourceRest.SetShortNames(apiresource.ShortNames)
 			resourceRest.SetKind(apiresource.Kind)
 			resourceRest.SetGroup(apiresource.Group)
 			resourceRest.SetVersion(apiresource.Version)
-			switch {
-			case strings.HasSuffix(apiresource.Name, "/scale"):
-				shadowv1alpha1storage[apiresource.Name] = template.NewScaleREST(resourceRest)
-			default:
-				shadowv1alpha1storage[apiresource.Name] = resourceRest
-			}
+			shadowv1alpha1storage[apiresource.Name] = resourceRest
 		}
 	}
 
