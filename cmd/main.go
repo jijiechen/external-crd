@@ -18,7 +18,7 @@ package main
 
 import (
 	"flag"
-	k8sjijiechencomv1 "github.com/jijiechen/external-crd/pkg/api/v1"
+	kcrd "github.com/jijiechen/external-crd/pkg/apis/kcrd/v1alpha1"
 	"github.com/jijiechen/external-crd/pkg/controllers"
 	"os"
 
@@ -43,7 +43,7 @@ var (
 func init() {
 	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
 
-	utilruntime.Must(k8sjijiechencomv1.AddToScheme(scheme))
+	utilruntime.Must(kcrd.AddToScheme(scheme))
 	//+kubebuilder:scaffold:scheme
 }
 

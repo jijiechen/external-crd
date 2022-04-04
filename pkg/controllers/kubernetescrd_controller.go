@@ -18,7 +18,7 @@ package controllers
 
 import (
 	"context"
-	k8sjijiechencomv1 "github.com/jijiechen/external-crd/pkg/api/v1"
+	kcrd "github.com/jijiechen/external-crd/pkg/apis/kcrd/v1alpha1"
 
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -56,6 +56,6 @@ func (r *KubernetesCrdReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 // SetupWithManager sets up the controller with the Manager.
 func (r *KubernetesCrdReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&k8sjijiechencomv1.KubernetesCrd{}).
+		For(&kcrd.KubernetesCrd{}).
 		Complete(r)
 }

@@ -1,4 +1,4 @@
-apiVersion: k8s.jijiechen.com/v1
+apiVersion: k8s.jijiechen.com/v1alpha1
 kind: KubernetesCrd
 metadata:
   name: kubernetescrd-sample

@@ -17,7 +17,7 @@ limitations under the License.
 package controllers
 
 import (
-	k8sjijiechencomv1 "github.com/jijiechen/external-crd/pkg/api/v1"
+	kcrd "github.com/jijiechen/external-crd/pkg/apis/kcrd/v1alpha1"
 	"path/filepath"
 	"testing"
 
@@ -61,7 +61,7 @@ var _ = BeforeSuite(func() {
 	Expect(err).NotTo(HaveOccurred())
 	Expect(cfg).NotTo(BeNil())
 
-	err = k8sjijiechencomv1.AddToScheme(scheme.Scheme)
+	err = kcrd.AddToScheme(scheme.Scheme)
 	Expect(err).NotTo(HaveOccurred())
 
 	//+kubebuilder:scaffold:scheme
