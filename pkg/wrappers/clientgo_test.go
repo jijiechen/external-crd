@@ -276,7 +276,7 @@ func TestNormalizeLocation(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		transport := NewClusternetTransport(tt.host, nil)
+		transport := NewExternalCrdTransport(tt.host, nil)
 		location := urlMustParse(tt.requestURL)
 		transport.normalizeLocation(location)
 

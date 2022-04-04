@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package template
+package crdmanifests
 
 import (
 	"strings"
@@ -23,22 +23,22 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 
-	appsapi "github.com/clusternet/clusternet/pkg/apis/apps/v1alpha1"
-	"github.com/clusternet/clusternet/pkg/known"
+	kcrd "github.com/jijiechen/external-crd/pkg/apis/kcrd/v1alpha1"
+	"github.com/jijiechen/external-crd/pkg/known"
 )
 
 func TestTransformManifest(t *testing.T) {
 	tests := []struct {
 		name         string
-		manifest     *appsapi.Manifest
+		manifest     *kcrd.KubernetesCrd
 		wantedString string
 		wantErr      bool
 	}{
 		{
-			manifest: &appsapi.Manifest{
+			manifest: &kcrd.KubernetesCrd{
 				TypeMeta: metav1.TypeMeta{
-					APIVersion: appsapi.SchemeGroupVersion.String(),
-					Kind:       appsapi.Kind("Manifest").String(),
+					APIVersion: kcrd.GroupVersion.String(),
+					Kind:       kcrd.Kind("Manifest").String(),
 				},
 				ObjectMeta: metav1.ObjectMeta{
 					Generation: 6,
@@ -49,12 +49,12 @@ func TestTransformManifest(t *testing.T) {
 						known.ConfigNameLabel:      "boo",
 						known.ConfigNamespaceLabel: "ns1",
 					},
-					Namespace:       known.ClusternetReservedNamespace,
+					Namespace:       known.KcrdReservedNamespace,
 					Name:            "bars-boo",
 					ResourceVersion: "1860247",
 					UID:             "13ff776c-1e91-4a84-b77d-6c35f3a52fed",
 				},
-				Template: runtime.RawExtension{
+				Manifest: runtime.RawExtension{
 					Raw: []byte(`
 {
   "apiVersion": "v1",

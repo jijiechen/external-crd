@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package template
+package crdmanifests
 
 import (
 	"encoding/json"
@@ -22,30 +22,29 @@ import (
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 
-	appsapi "github.com/clusternet/clusternet/pkg/apis/apps/v1alpha1"
-	"github.com/clusternet/clusternet/pkg/known"
+	appsapi "github.com/jijiechen/external-crd/pkg/apis/kcrd/v1alpha1"
 )
 
-func transformManifest(manifest *appsapi.Manifest) (*unstructured.Unstructured, error) {
+func transformManifest(crdResource *appsapi.KubernetesCrd) (*unstructured.Unstructured, error) {
 	result := &unstructured.Unstructured{}
-	if err := json.Unmarshal(manifest.Template.Raw, result); err != nil {
+	if err := json.Unmarshal(crdResource.Manifest.Raw, result); err != nil {
 		return nil, errors.NewInternalError(err)
 	}
-	result.SetGeneration(manifest.Generation)
-	result.SetCreationTimestamp(manifest.CreationTimestamp)
-	result.SetResourceVersion(manifest.ResourceVersion)
-	result.SetUID(manifest.UID)
-	result.SetDeletionGracePeriodSeconds(manifest.DeletionGracePeriodSeconds)
-	result.SetDeletionTimestamp(manifest.DeletionTimestamp)
-	result.SetFinalizers(manifest.Finalizers)
+	result.SetGeneration(crdResource.Generation)
+	result.SetCreationTimestamp(crdResource.CreationTimestamp)
+	result.SetResourceVersion(crdResource.ResourceVersion)
+	result.SetUID(crdResource.UID)
+	result.SetDeletionGracePeriodSeconds(crdResource.DeletionGracePeriodSeconds)
+	result.SetDeletionTimestamp(crdResource.DeletionTimestamp)
+	result.SetFinalizers(crdResource.Finalizers)
 
 	annotations := result.GetAnnotations()
-	if val, ok := manifest.Annotations[known.FeedProtectionAnnotation]; ok {
-		if annotations == nil {
-			annotations = map[string]string{}
-		}
-		annotations[known.FeedProtectionAnnotation] = val
-	}
+	//if val, ok := crdResource.Annotations[known.FeedProtectionAnnotation]; ok {
+	//	if annotations == nil {
+	//		annotations = map[string]string{}
+	//	}
+	//	annotations[known.FeedProtectionAnnotation] = val
+	//}
 	result.SetAnnotations(annotations)
 
 	return result, nil

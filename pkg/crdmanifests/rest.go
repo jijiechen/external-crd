@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package template
+package crdmanifests
 
 import (
 	"context"
@@ -45,10 +45,10 @@ import (
 	clientgorest "k8s.io/client-go/rest"
 	"k8s.io/klog/v2"
 
-	appsapi "github.com/clusternet/clusternet/pkg/apis/apps/v1alpha1"
 	clusternet "github.com/clusternet/clusternet/pkg/generated/clientset/versioned"
 	applisters "github.com/clusternet/clusternet/pkg/generated/listers/apps/v1alpha1"
-	"github.com/clusternet/clusternet/pkg/known"
+	kcrd "github.com/jijiechen/external-crd/pkg/apis/kcrd/v1alpha1"
+	"github.com/jijiechen/external-crd/pkg/known"
 )
 
 const (
@@ -98,13 +98,13 @@ func (r *REST) Create(ctx context.Context, obj runtime.Object, createValidation 
 	}
 
 	// next we create manifest to store the result
-	manifest := &appsapi.Manifest{
+	manifest := &kcrd.KubernetesCrd{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      r.getNormalizedManifestName(result.GetNamespace(), result.GetName()),
 			Namespace: r.reservedNamespace,
 			Labels:    result.GetLabels(), // reuse labels from original object, which is useful for label selector
 		},
-		Template: runtime.RawExtension{
+		Manifest: runtime.RawExtension{
 			Object: result,
 		},
 	}
@@ -129,7 +129,7 @@ func (r *REST) Create(ctx context.Context, obj runtime.Object, createValidation 
 
 // Get retrieves the item from Manifest.
 func (r *REST) Get(ctx context.Context, name string, options *metav1.GetOptions) (runtime.Object, error) {
-	var manifest *appsapi.Manifest
+	var manifest *kcrd.KubernetesCrd
 	var err error
 	if len(options.ResourceVersion) == 0 {
 		manifest, err = r.manifestLister.Manifests(r.reservedNamespace).Get(r.getNormalizedManifestName(request.NamespaceValue(ctx), name))
@@ -342,7 +342,7 @@ func (r *REST) Watch(ctx context.Context, options *internalversion.ListOptions) 
 			return object
 		}
 
-		if manifest, ok := object.(*appsapi.Manifest); ok {
+		if manifest, ok := object.(*kcrd.KubernetesCrd); ok {
 			obj, err := transformManifest(manifest)
 			if err != nil {
 				klog.ErrorDepth(3, fmt.Sprintf("failed to transform Manifest %s: %v", klog.KObj(manifest), err))

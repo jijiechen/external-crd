@@ -24,7 +24,7 @@ import (
 	"regexp"
 	"strings"
 
-	shadowapi "github.com/jijiechen/external-crd/pkg/apis/overlay/v1alpha1"
+	overlayapi "github.com/jijiechen/external-crd/pkg/apis/overlay/v1alpha1"
 )
 
 var (
@@ -33,49 +33,49 @@ var (
 	// regex matches "/apis/{group}/{version}/{path}"
 	apisRegex = regexp.MustCompile(`^(/apis/.*/v\w*.)/(.*)`)
 	// regex matches "/apis/xxx.clusternet.io/{version}/{path}"
-	clusternetAPIsRegex = regexp.MustCompile(`^(/apis/\w*\.clusternet\.io/v\w*.)/(.*)`)
+	kcrdAPIsRegex = regexp.MustCompile(`^(/apis/\w*\.jijiechen\.com/v\w*.)/(.*)`)
 
-	// shadowGV represents current overlay GroupVersion
-	shadowGV = shadowapi.SchemeGroupVersion.String()
+	// overlayGV represents current overlay GroupVersion
+	overlayGV = overlayapi.SchemeGroupVersion.String()
 )
 
-// ClusternetTransport is a transport to redirect requests to clusternet-hub
-type ClusternetTransport struct {
+// ExternalCrdTransport is a transport to redirect requests to clusternet-hub
+type ExternalCrdTransport struct {
 	// relative paths may omit leading slash
 	path string
 
 	rt http.RoundTripper
 }
 
-func (t *ClusternetTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+func (t *ExternalCrdTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 	t.normalizeLocation(req.URL)
 	return t.rt.RoundTrip(req)
 }
 
 // normalizeLocation format the request URL to Clusternet overlay GVKs
-func (t *ClusternetTransport) normalizeLocation(location *url.URL) {
+func (t *ExternalCrdTransport) normalizeLocation(location *url.URL) {
 	curPath := location.Path
 	// Trim returns a slice of the string s with all leading and trailing Unicode code points contained in cutset removed.
 	// so we use Replace here
 	reqPath := strings.Replace(curPath, t.path, "", 1)
 	if apiv1Regex.MatchString(reqPath) {
-		location.Path = path.Join(t.path, apiv1Regex.ReplaceAllString(reqPath, fmt.Sprintf("/apis/%s/$2", shadowGV)))
+		location.Path = path.Join(t.path, apiv1Regex.ReplaceAllString(reqPath, fmt.Sprintf("/apis/%s/$2", overlayGV)))
 	}
 	// we don't normalize request for Group xxx.clusternet.io
-	if clusternetAPIsRegex.MatchString(reqPath) {
+	if kcrdAPIsRegex.MatchString(reqPath) {
 		return
 	}
 	if apisRegex.MatchString(reqPath) {
-		location.Path = path.Join(t.path, apisRegex.ReplaceAllString(reqPath, fmt.Sprintf("/apis/%s/$2", shadowGV)))
+		location.Path = path.Join(t.path, apisRegex.ReplaceAllString(reqPath, fmt.Sprintf("/apis/%s/$2", overlayGV)))
 	}
 }
 
-func NewClusternetTransport(host string, rt http.RoundTripper) *ClusternetTransport {
+func NewExternalCrdTransport(host string, rt http.RoundTripper) *ExternalCrdTransport {
 	// host must be a host string, a host:port pair, or a URL to the base of the apiserver.
 	// If a URL is given then the (optional) Path of that URL represents a prefix that must
 	// be appended to all request URIs used to access the apiserver. This allows a frontend
 	// proxy to easily relocate all of the apiserver endpoints.
-	return &ClusternetTransport{
+	return &ExternalCrdTransport{
 		path: urlMustParse(host).Path,
 		rt:   rt,
 	}
