@@ -1,0 +1,20 @@
+# permissions for end users to view kubernetescrds.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: kubernetescrd-viewer-role
+rules:
+- apiGroups:
+  - k8s.jijiechen.com
+  resources:
+  - kubernetescrds
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - k8s.jijiechen.com
+  resources:
+  - kubernetescrds/status
+  verbs:
+  - get

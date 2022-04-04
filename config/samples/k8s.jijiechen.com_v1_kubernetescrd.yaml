@@ -1,0 +1,6 @@
+apiVersion: k8s.jijiechen.com/v1
+kind: KubernetesCrd
+metadata:
+  name: kubernetescrd-sample
+spec:
+  # TODO(user): Add fields here
