@@ -93,8 +93,8 @@ func LoadsKubeConfig(clientConnectionCfg *componentbaseconfig.ClientConnectionCo
 	}
 
 	// apply qps and burst settings
-	cfg.QPS = clientConnectionCfg.QPS
-	cfg.Burst = int(clientConnectionCfg.Burst)
+	//cfg.QPS = clientConnectionCfg.QPS
+	//cfg.Burst = int(clientConnectionCfg.Burst)
 	return cfg, nil
 }
 
@@ -111,8 +111,8 @@ func GenerateKubeConfigFromToken(serverURL, token string, caCert []byte, flowRat
 	}
 
 	// here we magnify the default qps and burst in client-go
-	config.QPS = rest.DefaultQPS * float32(flowRate)
-	config.Burst = rest.DefaultBurst * flowRate
+	//config.QPS = rest.DefaultQPS * float32(flowRate)
+	//config.Burst = rest.DefaultBurst * flowRate
 
 	return config, nil
 }

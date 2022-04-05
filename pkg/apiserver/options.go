@@ -42,14 +42,10 @@ import (
 	"k8s.io/apiserver/pkg/admission"
 	"k8s.io/apiserver/pkg/admission/plugin/namespace/lifecycle"
 	apirequest "k8s.io/apiserver/pkg/endpoints/request"
-	"k8s.io/apiserver/pkg/features"
 	genericapiserver "k8s.io/apiserver/pkg/server"
 	genericfilters "k8s.io/apiserver/pkg/server/filters"
 	genericoptions "k8s.io/apiserver/pkg/server/options"
-	utilfeature "k8s.io/apiserver/pkg/util/feature"
-	utilflowcontrol "k8s.io/apiserver/pkg/util/flowcontrol"
 	"k8s.io/client-go/kubernetes"
-	"k8s.io/client-go/rest"
 	"k8s.io/klog/v2"
 
 	kcrd "github.com/jijiechen/external-crd/pkg/generated/clientset/versioned"
@@ -88,8 +84,8 @@ func NewOverlayServerOptions() (*OverlayServerOptions, error) {
 	if err != nil {
 		return nil, err
 	}
-	controllerOpts.ClientConnection.QPS = rest.DefaultQPS * float32(10)
-	controllerOpts.ClientConnection.Burst = int32(rest.DefaultBurst * 10)
+	//controllerOpts.ClientConnection.QPS = rest.DefaultQPS * float32(10)
+	//controllerOpts.ClientConnection.Burst = int32(rest.DefaultBurst * 10)
 
 	return &OverlayServerOptions{
 		RecommendedOptions:     genericoptions.NewRecommendedOptions("fake", nil),
@@ -219,18 +215,6 @@ func (o *OverlayServerOptions) recommendedOptionsApplyTo(config *genericapiserve
 		return err
 	} else if err := o.RecommendedOptions.Admission.ApplyTo(&config.Config, config.SharedInformerFactory, config.ClientConfig, o.RecommendedOptions.FeatureGate, initializers...); err != nil {
 		return err
-	}
-	if utilfeature.DefaultFeatureGate.Enabled(features.APIPriorityAndFairness) {
-		if config.ClientConfig != nil {
-			config.FlowControl = utilflowcontrol.New(
-				config.SharedInformerFactory,
-				kubernetes.NewForConfigOrDie(config.ClientConfig).FlowcontrolV1beta2(),
-				config.MaxRequestsInFlight+config.MaxMutatingRequestsInFlight,
-				config.RequestTimeout/4,
-			)
-		} else {
-			klog.Warningf("Neither kubeconfig is provided nor service-account is mounted, so APIPriorityAndFairness will be disabled")
-		}
 	}
 	return nil
 }
@@ -378,8 +362,8 @@ func (o *ControllerOptions) Complete() error {
 // AddFlags adds flags for ControllerOptions.
 func (o *ControllerOptions) AddFlags(fs *pflag.FlagSet) {
 	fs.StringVar(&o.ClientConnection.Kubeconfig, "kubeconfig", o.ClientConnection.Kubeconfig, "Path to a kubeconfig file pointing at the 'core' kubernetes server. Only required if out-of-cluster.")
-	fs.Float32Var(&o.ClientConnection.QPS, "kube-api-qps", o.ClientConnection.QPS, "QPS to use while talking with the 'core' kubernetes apiserver.")
-	fs.Int32Var(&o.ClientConnection.Burst, "kube-api-burst", o.ClientConnection.Burst, "Burst to use while talking with 'core' kubernetes apiserver.")
+	//fs.Float32Var(&o.ClientConnection.QPS, "kube-api-qps", o.ClientConnection.QPS, "QPS to use while talking with the 'core' kubernetes apiserver.")
+	//fs.Int32Var(&o.ClientConnection.Burst, "kube-api-burst", o.ClientConnection.Burst, "Burst to use while talking with 'core' kubernetes apiserver.")
 
 	componentbaseoptions.BindLeaderElectionFlags(&o.LeaderElection, fs)
 	if err := fs.MarkHidden("leader-elect-resource-lock"); err != nil {
