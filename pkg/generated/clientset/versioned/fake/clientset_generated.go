@@ -21,8 +21,8 @@ import (
 	clientset "github.com/jijiechen/external-crd/pkg/generated/clientset/versioned"
 	kcrdv1alpha1 "github.com/jijiechen/external-crd/pkg/generated/clientset/versioned/typed/kcrd/v1alpha1"
 	fakekcrdv1alpha1 "github.com/jijiechen/external-crd/pkg/generated/clientset/versioned/typed/kcrd/v1alpha1/fake"
-	overlayv1beta1 "github.com/jijiechen/external-crd/pkg/generated/clientset/versioned/typed/overlay/v1beta1"
-	fakeoverlayv1beta1 "github.com/jijiechen/external-crd/pkg/generated/clientset/versioned/typed/overlay/v1beta1/fake"
+	overlayv1alpha1 "github.com/jijiechen/external-crd/pkg/generated/clientset/versioned/typed/overlay/v1alpha1"
+	fakeoverlayv1alpha1 "github.com/jijiechen/external-crd/pkg/generated/clientset/versioned/typed/overlay/v1alpha1/fake"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/watch"
 	"k8s.io/client-go/discovery"
@@ -85,7 +85,7 @@ func (c *Clientset) KcrdV1alpha1() kcrdv1alpha1.KcrdV1alpha1Interface {
 	return &fakekcrdv1alpha1.FakeKcrdV1alpha1{Fake: &c.Fake}
 }
 
-// OverlayV1beta1 retrieves the OverlayV1beta1Client
-func (c *Clientset) OverlayV1beta1() overlayv1beta1.OverlayV1beta1Interface {
-	return &fakeoverlayv1beta1.FakeOverlayV1beta1{Fake: &c.Fake}
+// OverlayV1alpha1 retrieves the OverlayV1alpha1Client
+func (c *Clientset) OverlayV1alpha1() overlayv1alpha1.OverlayV1alpha1Interface {
+	return &fakeoverlayv1alpha1.FakeOverlayV1alpha1{Fake: &c.Fake}
 }

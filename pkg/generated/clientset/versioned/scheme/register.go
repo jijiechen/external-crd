@@ -19,7 +19,7 @@ package scheme
 
 import (
 	kcrdv1alpha1 "github.com/jijiechen/external-crd/pkg/apis/kcrd/v1alpha1"
-	overlayv1beta1 "github.com/jijiechen/external-crd/pkg/apis/overlay/v1beta1"
+	overlayv1alpha1 "github.com/jijiechen/external-crd/pkg/apis/overlay/v1alpha1"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	runtime "k8s.io/apimachinery/pkg/runtime"
 	schema "k8s.io/apimachinery/pkg/runtime/schema"
@@ -32,7 +32,7 @@ var Codecs = serializer.NewCodecFactory(Scheme)
 var ParameterCodec = runtime.NewParameterCodec(Scheme)
 var localSchemeBuilder = runtime.SchemeBuilder{
 	kcrdv1alpha1.AddToScheme,
-	overlayv1beta1.AddToScheme,
+	overlayv1alpha1.AddToScheme,
 }
 
 // AddToScheme adds all types of this clientset into the given scheme. This allows composition

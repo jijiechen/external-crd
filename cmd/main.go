@@ -1,5 +1,5 @@
 /*
-Copyright 2022.
+Copyright 2021 The Clusternet Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -17,87 +17,84 @@ limitations under the License.
 package main
 
 import (
-	"flag"
-	kcrd "github.com/jijiechen/external-crd/pkg/apis/kcrd/v1alpha1"
-	"github.com/jijiechen/external-crd/pkg/controllers"
+	goflag "flag"
+	"fmt"
+	"github.com/jijiechen/external-crd/pkg/apiserver"
+	"github.com/spf13/cobra"
+	utilfeature "k8s.io/apiserver/pkg/util/feature"
+	"math/rand"
 	"os"
+	"time"
 
-	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
-	// to ensure that exec-entrypoint and run can make use of them.
-	_ "k8s.io/client-go/plugin/pkg/client/auth"
+	"github.com/spf13/pflag"
+	"k8s.io/klog/v2"
 
-	"k8s.io/apimachinery/pkg/runtime"
-	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
-	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
-	ctrl "sigs.k8s.io/controller-runtime"
-	"sigs.k8s.io/controller-runtime/pkg/healthz"
-	"sigs.k8s.io/controller-runtime/pkg/log/zap"
-	//+kubebuilder:scaffold:imports
+	"context"
+	"github.com/jijiechen/external-crd/pkg/utils"
 )
 
 var (
-	scheme   = runtime.NewScheme()
-	setupLog = ctrl.Log.WithName("setup")
+	// the command name
+	cmdName = "external-crd"
 )
 
-func init() {
-	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
+func main() {
+	klog.InitFlags(nil)
+	defer klog.Flush()
+	rand.Seed(time.Now().UTC().UnixNano())
 
-	utilruntime.Must(kcrd.AddToScheme(scheme))
-	//+kubebuilder:scaffold:scheme
+	ctx := utils.GracefulStopWithContext()
+	command := NewExternalCrdServerCmd(ctx)
+	pflag.CommandLine.SetNormalizeFunc(utils.WordSepNormalizeFunc)
+	pflag.CommandLine.AddGoFlagSet(goflag.CommandLine)
+
+	if err := command.Execute(); err != nil {
+		fmt.Fprintf(os.Stderr, "%v\n", err)
+		os.Exit(1)
+	}
 }
 
-func main() {
-	var metricsAddr string
-	var enableLeaderElection bool
-	var probeAddr string
-	flag.StringVar(&metricsAddr, "metrics-bind-address", ":8080", "The address the metric endpoint binds to.")
-	flag.StringVar(&probeAddr, "health-probe-bind-address", ":8081", "The address the probe endpoint binds to.")
-	flag.BoolVar(&enableLeaderElection, "leader-elect", false,
-		"Enable leader election for controller manager. "+
-			"Enabling this will ensure there is only one active controller manager.")
-	opts := zap.Options{
-		Development: true,
-	}
-	opts.BindFlags(flag.CommandLine)
-	flag.Parse()
-
-	ctrl.SetLogger(zap.New(zap.UseFlagOptions(&opts)))
-
-	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
-		Scheme:                 scheme,
-		MetricsBindAddress:     metricsAddr,
-		Port:                   9443,
-		HealthProbeBindAddress: probeAddr,
-		LeaderElection:         enableLeaderElection,
-		LeaderElectionID:       "9a3cfc83.github.com",
-	})
+// NewExternalCrdServerCmd creates a *cobra.Command object with default parameters
+func NewExternalCrdServerCmd(ctx context.Context) *cobra.Command {
+	opts, err := apiserver.NewOverlayServerOptions()
 	if err != nil {
-		setupLog.Error(err, "unable to start manager")
-		os.Exit(1)
+		klog.Fatalf("unable to initialize command options: %v", err)
 	}
 
-	if err = (&controllers.KubernetesCrdReconciler{
-		Client: mgr.GetClient(),
-		Scheme: mgr.GetScheme(),
-	}).SetupWithManager(mgr); err != nil {
-		setupLog.Error(err, "unable to create controller", "controller", "KubernetesCrd")
-		os.Exit(1)
-	}
-	//+kubebuilder:scaffold:builder
+	cmd := &cobra.Command{
+		Use:  cmdName,
+		Long: `Running in external cluster, responsible for storing CRDs`,
+		Run: func(cmd *cobra.Command, args []string) {
+			if err := utils.PrintAndExitIfRequested(cmdName); err != nil {
+				klog.Exit(err)
+			}
 
-	if err := mgr.AddHealthzCheck("healthz", healthz.Ping); err != nil {
-		setupLog.Error(err, "unable to set up health check")
-		os.Exit(1)
-	}
-	if err := mgr.AddReadyzCheck("readyz", healthz.Ping); err != nil {
-		setupLog.Error(err, "unable to set up ready check")
-		os.Exit(1)
+			if err := opts.Complete(); err != nil {
+				klog.Exit(err)
+			}
+			if err := opts.Validate(); err != nil {
+				klog.Exit(err)
+			}
+
+			cmd.Flags().VisitAll(func(flag *pflag.Flag) {
+				klog.V(1).Infof("FLAG: --%s=%q", flag.Name, flag.Value)
+			})
+
+			server, err := apiserver.NewOverlayServer(opts)
+			if err != nil {
+				klog.Exit(err)
+			}
+			if err := server.Run(ctx); err != nil {
+				klog.Exit(err)
+			}
+		},
 	}
 
-	setupLog.Info("starting manager")
-	if err := mgr.Start(ctrl.SetupSignalHandler()); err != nil {
-		setupLog.Error(err, "problem running manager")
-		os.Exit(1)
-	}
+	// bind flags
+	flags := cmd.Flags()
+	utils.AddVersionFlag(flags)
+	opts.AddFlags(flags)
+	utilfeature.DefaultMutableFeatureGate.AddFlag(flags)
+
+	return cmd
 }

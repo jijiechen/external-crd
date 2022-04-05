@@ -31,10 +31,10 @@ CODEGEN_PKG=${CODEGEN_PKG:-$(
 bash "${CODEGEN_PKG}/generate-groups.sh" all \
   github.com/jijiechen/external-crd/pkg/generated \
   github.com/jijiechen/external-crd/pkg/apis \
-  "kcrd:v1alpha1 overlay:v1beta1" \
+  "kcrd:v1alpha1 overlay:v1alpha1" \
   --output-base "$(dirname "${BASH_SOURCE[0]}")/.." \
-  --go-header-file "${SCRIPT_ROOT}/hack/boilerplate.go.txt" \
-  debug -v 10 \
+  --go-header-file "${SCRIPT_ROOT}/hack/boilerplate.go.txt" 
+  # -v 10 \
 
   rm -rf "$(dirname "${BASH_SOURCE[0]}")/../pkg/generated"
   mv github.com/jijiechen/external-crd/pkg/generated "$(dirname "${BASH_SOURCE[0]}")/../pkg/"

@@ -16,14 +16,9 @@ limitations under the License.
 
 package known
 
+import "time"
+
 const (
-	// NamePrefixForClusternetObjects is a prefix name for generating external-crd related objects for child cluster,
-	// such as namespace, sa, etc
-	NamePrefixForExternalCrdObjects = "kcrd-"
-
-	// ClusterAPIServerURLKey denotes the apiserver address
-	ClusterAPIServerURLKey = "apiserver-advertise-url"
-
 	// KcrdSystemNamespace is the default system namespace where we place system components.
 	// This could be re-configured with flag "--leader-elect-resource-namespace"
 	KcrdSystemNamespace = "external-crd-system"
@@ -36,21 +31,11 @@ const (
 	AppFinalizer string = "k8s.jijiechen.com/finalizer"
 )
 
-// fields should be ignored when compared
 const (
-	MetaGeneration    = "/metadata/generation"
-	CreationTimestamp = "/metadata/creationTimestamp"
-	ManagedFields     = "/metadata/managedFields"
-	MetaUID           = "/metadata/uid"
-	MetaSelflink      = "/metadata/selfLink"
+	// DefaultResync means the default resync time
+	DefaultResync = time.Hour * 12
 )
 
 const (
-	Category = "external-crd.overlay"
-)
-
-const (
-	// NoteLengthLimit denotes the maximum note length.
-	// copied from k8s.io/kubernetes/pkg/apis/core/validation/events.go
-	NoteLengthLimit = 1024
+	Category = "external-crd"
 )

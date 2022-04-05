@@ -19,41 +19,32 @@ package apiserver
 import (
 	"fmt"
 	"github.com/jijiechen/external-crd/pkg/crdmanifests"
-	"path"
 	"strings"
 	"time"
 
 	autoscalingapiv1 "k8s.io/api/autoscaling/v1"
-	crdinformers "k8s.io/apiextensions-apiserver/pkg/client/informers/externalversions"
-	apiextensionsv1lister "k8s.io/apiextensions-apiserver/pkg/client/listers/apiextensions/v1"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/runtime/serializer"
-	"k8s.io/apimachinery/pkg/util/sets"
-	"k8s.io/apiserver/pkg/admission"
 	genericapi "k8s.io/apiserver/pkg/endpoints"
 	genericdiscovery "k8s.io/apiserver/pkg/endpoints/discovery"
-	k8sfeatures "k8s.io/apiserver/pkg/features"
 	"k8s.io/apiserver/pkg/registry/rest"
 	genericapiserver "k8s.io/apiserver/pkg/server"
 	"k8s.io/apiserver/pkg/storageversion"
-	utilfeature "k8s.io/apiserver/pkg/util/feature"
 	"k8s.io/client-go/discovery"
 	restclient "k8s.io/client-go/rest"
 	"k8s.io/client-go/restmapper"
-	"k8s.io/client-go/tools/cache"
 	"k8s.io/klog/v2"
 	apiservicelisters "k8s.io/kube-aggregator/pkg/client/listers/apiregistration/v1"
 	metricsapi "k8s.io/metrics/pkg/apis/metrics"
 
-	shadowinstall "github.com/jijiechen/external-crd/pkg/apis/overlay/install"
-	shadowapi "github.com/jijiechen/external-crd/pkg/apis/overlay/v1alpha1"
-	clusternet "github.com/jijiechen/external-crd/pkg/generated/clientset/versioned"
-	applisters "github.com/jijiechen/external-crd/pkg/generated/listers/kcrd/v1alpha1"
+	overlayinstall "github.com/jijiechen/external-crd/pkg/apis/overlay/install"
+	overlayapi "github.com/jijiechen/external-crd/pkg/apis/overlay/v1alpha1"
+	kcrd "github.com/jijiechen/external-crd/pkg/generated/clientset/versioned"
+	kcrdlisters "github.com/jijiechen/external-crd/pkg/generated/listers/kcrd/v1alpha1"
 )
 
 var (
@@ -67,11 +58,11 @@ var (
 )
 
 const (
-	clusternetGroupSuffix = ".clusternet.io"
+	kcrdGroupSuffix = ".jijiechen.com"
 )
 
 func init() {
-	shadowinstall.Install(Scheme)
+	overlayinstall.Install(Scheme)
 
 	// we need to add the options to empty v1
 	// TODO fix the server code to avoid this
@@ -94,88 +85,56 @@ func init() {
 	)
 }
 
-// ShadowAPIServer will make a overlay copy for all the APIs
-type ShadowAPIServer struct {
+// OverlayAPIServer will make a overlay copy for all the APIs
+type OverlayAPIServer struct {
 	GenericAPIServer    *genericapiserver.GenericAPIServer
 	maxRequestBodyBytes int64
 	minRequestTimeout   int
 
-	// admissionControl performs deep inspection of a given request (including content)
-	// to set values and determine whether its allowed
-	admissionControl admission.Interface
+	kubeRESTClient restclient.Interface
+	kcrdClient     *kcrd.Clientset
 
-	kubeRESTClient   restclient.Interface
-	clusternetclient *clusternet.Clientset
-
-	manifestLister   applisters.KubernetesCrdLister
-	crdLister        apiextensionsv1lister.CustomResourceDefinitionLister
-	crdSynced        cache.InformerSynced
-	crdHandler       *crdHandler
+	kcrdLister       kcrdlisters.KubernetesCrdLister
 	apiserviceLister apiservicelisters.APIServiceLister
 
 	// namespace where Manifests are created
 	reservedNamespace string
 }
 
-func NewShadowAPIServer(apiserver *genericapiserver.GenericAPIServer,
-	maxRequestBodyBytes int64, minRequestTimeout int,
-	admissionControl admission.Interface,
-	kubeRESTClient restclient.Interface, clusternetclient *clusternet.Clientset,
-	manifestLister applisters.KubernetesCrdLister, apiserviceLister apiservicelisters.APIServiceLister,
-	crdInformerFactory crdinformers.SharedInformerFactory,
-	reservedNamespace string) *ShadowAPIServer {
+func NewOverlayAPIServer(apiserver *genericapiserver.GenericAPIServer, maxRequestBodyBytes int64, minRequestTimeout int,
+	kubeRESTClient restclient.Interface, kcrdClient *kcrd.Clientset, manifestLister kcrdlisters.KubernetesCrdLister,
+	apiserviceLister apiservicelisters.APIServiceLister, reservedNamespace string) *OverlayAPIServer {
 
-	return &ShadowAPIServer{
+	return &OverlayAPIServer{
 		GenericAPIServer:    apiserver,
 		maxRequestBodyBytes: maxRequestBodyBytes,
 		minRequestTimeout:   minRequestTimeout,
-		admissionControl:    admissionControl,
 		kubeRESTClient:      kubeRESTClient,
-		clusternetclient:    clusternetclient,
-		manifestLister:      manifestLister,
-		crdLister:           crdInformerFactory.Apiextensions().V1().CustomResourceDefinitions().Lister(),
-		crdSynced:           crdInformerFactory.Apiextensions().V1().CustomResourceDefinitions().Informer().HasSynced,
-		crdHandler: NewCRDHandler(
-			kubeRESTClient, clusternetclient, manifestLister, apiserviceLister,
-			crdInformerFactory.Apiextensions().V1().CustomResourceDefinitions(),
-			minRequestTimeout, maxRequestBodyBytes, admissionControl, apiserver.Authorizer, apiserver.Serializer, reservedNamespace),
-		apiserviceLister:  apiserviceLister,
-		reservedNamespace: reservedNamespace,
+		kcrdClient:          kcrdClient,
+		kcrdLister:          manifestLister,
+		apiserviceLister:    apiserviceLister,
+		reservedNamespace:   reservedNamespace,
 	}
 }
 
-func (ss *ShadowAPIServer) InstallShadowAPIGroups(stopCh <-chan struct{}, cl discovery.DiscoveryInterface) error {
+func (ols *OverlayAPIServer) InstallOverlayAPIGroups(stopCh <-chan struct{}, cl discovery.DiscoveryInterface) error {
 	// Wait for all CRDs to sync before installing overlay api resources.
 	klog.V(5).Info("overlay apiserver is waiting for informer caches to sync")
-	cache.WaitForCacheSync(stopCh, ss.crdSynced)
-	crds, err := ss.crdLister.List(labels.Everything())
-	if err != nil {
-		return err
-	}
-	crdGroups := sets.String{}
-	for _, crd := range crds {
-		if crdGroups.Has(crd.Spec.Group) {
-			continue
-		}
-		crdGroups = crdGroups.Insert(crd.Spec.Group)
-	}
-
-	// TODO: add openapi controller to update openapi spec
 
 	apiGroupResources, err := restmapper.GetAPIGroupResources(cl)
 	if err != nil {
 		return err
 	}
 
-	shadowv1alpha1storage := map[string]rest.Storage{}
+	overlayv1alpha1storage := map[string]rest.Storage{}
 	for _, apiGroupResource := range apiGroupResources {
-		// no need to duplicate xxx.clusternet.io
-		if strings.HasSuffix(apiGroupResource.Group.Name, clusternetGroupSuffix) {
+		// no need to duplicate xxx.kcrd.io
+		if strings.HasSuffix(apiGroupResource.Group.Name, kcrdGroupSuffix) {
 			continue
 		}
 
 		// skip overlay group to avoid getting nested
-		if apiGroupResource.Group.Name == shadowapi.GroupName {
+		if apiGroupResource.Group.Name == overlayapi.GroupName {
 			continue
 		}
 
@@ -186,48 +145,42 @@ func (ss *ShadowAPIServer) InstallShadowAPIGroups(stopCh <-chan struct{}, cl dis
 			continue
 		}
 
-		// skip CRDs, which will be handled by crdHandler later
-		if crdGroups.Has(apiGroupResource.Group.Name) {
-			continue
-		}
-
 		for _, apiresource := range normalizeAPIGroupResources(apiGroupResource) {
 			// register this resource to storage if the priority is the highest
-			if !canBeAddedToStorage(apiresource.Group, apiresource.Version, apiresource.Name, ss.apiserviceLister) {
+			if !canBeAddedToStorage(apiresource.Group, apiresource.Version, apiresource.Name, ols.apiserviceLister) {
 				continue
 			}
 
-			ss.crdHandler.AddNonCRDAPIResource(apiresource)
 			// register scheme for original GVK
 			Scheme.AddKnownTypeWithName(schema.GroupVersion{Group: apiGroupResource.Group.Name, Version: apiresource.Version}.WithKind(apiresource.Kind),
 				&unstructured.Unstructured{},
 			)
 
-			resourceRest := crdmanifests.NewREST(ss.kubeRESTClient, ss.clusternetclient, ParameterCodec, ss.manifestLister, ss.reservedNamespace)
+			resourceRest := crdmanifests.NewREST(ols.kubeRESTClient, ols.kcrdClient, ParameterCodec, ols.kcrdLister, ols.reservedNamespace)
 			resourceRest.SetNamespaceScoped(apiresource.Namespaced)
 			resourceRest.SetName(apiresource.Name)
 			resourceRest.SetShortNames(apiresource.ShortNames)
 			resourceRest.SetKind(apiresource.Kind)
 			resourceRest.SetGroup(apiresource.Group)
 			resourceRest.SetVersion(apiresource.Version)
-			shadowv1alpha1storage[apiresource.Name] = resourceRest
+			overlayv1alpha1storage[apiresource.Name] = resourceRest
 		}
 	}
 
-	shadowAPIGroupInfo := genericapiserver.NewDefaultAPIGroupInfo(shadowapi.GroupName, Scheme, ParameterCodec, Codecs)
-	shadowAPIGroupInfo.PrioritizedVersions = []schema.GroupVersion{
+	overlayAPIGroupInfo := genericapiserver.NewDefaultAPIGroupInfo(overlayapi.GroupName, Scheme, ParameterCodec, Codecs)
+	overlayAPIGroupInfo.PrioritizedVersions = []schema.GroupVersion{
 		{
-			Group:   shadowapi.GroupName,
-			Version: shadowapi.SchemeGroupVersion.Version,
+			Group:   overlayapi.GroupName,
+			Version: overlayapi.SchemeGroupVersion.Version,
 		},
 	}
-	shadowAPIGroupInfo.VersionedResourcesStorageMap["v1alpha1"] = shadowv1alpha1storage
-	return ss.installAPIGroups(&shadowAPIGroupInfo)
+	overlayAPIGroupInfo.VersionedResourcesStorageMap["v1alpha1"] = overlayv1alpha1storage
+	return ols.installAPIGroups(&overlayAPIGroupInfo)
 }
 
 // Exposes given api groups in the API.
 // copied from k8s.io/apiserver/pkg/server/genericapiserver.go and modified
-func (ss *ShadowAPIServer) installAPIGroups(apiGroupInfos ...*genericapiserver.APIGroupInfo) error {
+func (ols *OverlayAPIServer) installAPIGroups(apiGroupInfos ...*genericapiserver.APIGroupInfo) error {
 	for _, apiGroupInfo := range apiGroupInfos {
 		// Do not register empty group or empty version.  Doing so claims /apis/ for the wrong entity to be returned.
 		// Catching these here places the error  much closer to its origin
@@ -240,21 +193,8 @@ func (ss *ShadowAPIServer) installAPIGroups(apiGroupInfos ...*genericapiserver.A
 	}
 
 	for _, apiGroupInfo := range apiGroupInfos {
-		if err := ss.installAPIResources(genericapiserver.APIGroupPrefix, apiGroupInfo); err != nil {
+		if err := ols.installAPIResources(genericapiserver.APIGroupPrefix, apiGroupInfo); err != nil {
 			return fmt.Errorf("unable to install api resources: %v", err)
-		}
-
-		if apiGroupInfo.PrioritizedVersions[0].String() == shadowapi.SchemeGroupVersion.String() {
-			var found bool
-			for _, ws := range ss.GenericAPIServer.Handler.GoRestfulContainer.RegisteredWebServices() {
-				if ws.RootPath() == path.Join(genericapiserver.APIGroupPrefix, shadowapi.SchemeGroupVersion.String()) {
-					ss.crdHandler.SetRootWebService(ws)
-					found = true
-				}
-			}
-			if !found {
-				klog.WarningDepth(2, fmt.Sprintf("failed to find a root WebServices for %s", shadowapi.SchemeGroupVersion))
-			}
 		}
 
 		// setup discovery
@@ -280,15 +220,15 @@ func (ss *ShadowAPIServer) installAPIGroups(apiGroupInfos ...*genericapiserver.A
 			Versions:         apiVersionsForDiscovery,
 			PreferredVersion: preferredVersionForDiscovery,
 		}
-		ss.GenericAPIServer.DiscoveryGroupManager.AddGroup(apiGroup)
-		ss.GenericAPIServer.Handler.GoRestfulContainer.Add(genericdiscovery.NewAPIGroupHandler(ss.GenericAPIServer.Serializer, apiGroup).WebService())
+		ols.GenericAPIServer.DiscoveryGroupManager.AddGroup(apiGroup)
+		ols.GenericAPIServer.Handler.GoRestfulContainer.Add(genericdiscovery.NewAPIGroupHandler(ols.GenericAPIServer.Serializer, apiGroup).WebService())
 	}
 	return nil
 }
 
 // installAPIResources is a private method for installing the REST storage backing each api groupversionresource
 // copied from k8s.io/apiserver/pkg/server/genericapiserver.go and modified
-func (ss *ShadowAPIServer) installAPIResources(apiPrefix string, apiGroupInfo *genericapiserver.APIGroupInfo) error {
+func (ols *OverlayAPIServer) installAPIResources(apiPrefix string, apiGroupInfo *genericapiserver.APIGroupInfo) error {
 	var resourceInfos []*storageversion.ResourceInfo
 	for _, groupVersion := range apiGroupInfo.PrioritizedVersions {
 		if len(apiGroupInfo.VersionedResourcesStorageMap[groupVersion.Version]) == 0 {
@@ -296,14 +236,14 @@ func (ss *ShadowAPIServer) installAPIResources(apiPrefix string, apiGroupInfo *g
 			continue
 		}
 
-		apiGroupVersion := ss.getAPIGroupVersion(apiGroupInfo, groupVersion, apiPrefix)
+		apiGroupVersion := ols.getAPIGroupVersion(apiGroupInfo, groupVersion, apiPrefix)
 		if apiGroupInfo.OptionsExternalVersion != nil {
 			apiGroupVersion.OptionsExternalVersion = apiGroupInfo.OptionsExternalVersion
 		}
 
-		apiGroupVersion.MaxRequestBodyBytes = ss.maxRequestBodyBytes
+		apiGroupVersion.MaxRequestBodyBytes = ols.maxRequestBodyBytes
 
-		r, err := apiGroupVersion.InstallREST(ss.GenericAPIServer.Handler.GoRestfulContainer)
+		r, err := apiGroupVersion.InstallREST(ols.GenericAPIServer.Handler.GoRestfulContainer)
 		if err != nil {
 			return fmt.Errorf("unable to setup API %v: %v", apiGroupInfo, err)
 		}
@@ -311,31 +251,28 @@ func (ss *ShadowAPIServer) installAPIResources(apiPrefix string, apiGroupInfo *g
 		resourceInfos = append(resourceInfos, r...)
 	}
 
-	if utilfeature.DefaultFeatureGate.Enabled(k8sfeatures.StorageVersionAPI) &&
-		utilfeature.DefaultFeatureGate.Enabled(k8sfeatures.APIServerIdentity) {
-		// API installation happens before we start listening on the handlers,
-		// therefore it is safe to register ResourceInfos here. The handler will block
-		// write requests until the storage versions of the targeting resources are updated.
-		ss.GenericAPIServer.StorageVersionManager.AddResourceInfo(resourceInfos...)
-	}
+	// API installation happens before we start listening on the handlers,
+	// therefore it is safe to register ResourceInfos here. The handler will block
+	// write requests until the storage versions of the targeting resources are updated.
+	ols.GenericAPIServer.StorageVersionManager.AddResourceInfo(resourceInfos...)
 
 	return nil
 }
 
 // a private method that copied from k8s.io/apiserver/pkg/server/genericapiserver.go and modified
-func (ss *ShadowAPIServer) getAPIGroupVersion(apiGroupInfo *genericapiserver.APIGroupInfo, groupVersion schema.GroupVersion, apiPrefix string) *genericapi.APIGroupVersion {
+func (ols *OverlayAPIServer) getAPIGroupVersion(apiGroupInfo *genericapiserver.APIGroupInfo, groupVersion schema.GroupVersion, apiPrefix string) *genericapi.APIGroupVersion {
 	storage := make(map[string]rest.Storage)
 	for k, v := range apiGroupInfo.VersionedResourcesStorageMap[groupVersion.Version] {
 		storage[strings.ToLower(k)] = v
 	}
-	version := ss.newAPIGroupVersion(apiGroupInfo, groupVersion)
+	version := ols.newAPIGroupVersion(apiGroupInfo, groupVersion)
 	version.Root = apiPrefix
 	version.Storage = storage
 	return version
 }
 
 // a private method that copied from k8s.io/apiserver/pkg/server/genericapiserver.go and modified
-func (ss *ShadowAPIServer) newAPIGroupVersion(apiGroupInfo *genericapiserver.APIGroupInfo, groupVersion schema.GroupVersion) *genericapi.APIGroupVersion {
+func (ols *OverlayAPIServer) newAPIGroupVersion(apiGroupInfo *genericapiserver.APIGroupInfo, groupVersion schema.GroupVersion) *genericapi.APIGroupVersion {
 	return &genericapi.APIGroupVersion{
 		GroupVersion:     groupVersion,
 		MetaGroupVersion: apiGroupInfo.MetaGroupVersion,
@@ -350,11 +287,10 @@ func (ss *ShadowAPIServer) newAPIGroupVersion(apiGroupInfo *genericapiserver.API
 		Typer:                 apiGroupInfo.Scheme,
 		Linker:                runtime.SelfLinker(meta.NewAccessor()),
 
-		EquivalentResourceRegistry: ss.GenericAPIServer.EquivalentResourceRegistry,
+		EquivalentResourceRegistry: ols.GenericAPIServer.EquivalentResourceRegistry,
 
-		Admit:               ss.admissionControl,
-		MinRequestTimeout:   time.Duration(ss.minRequestTimeout) * time.Second,
-		Authorizer:          ss.GenericAPIServer.Authorizer,
-		MaxRequestBodyBytes: ss.maxRequestBodyBytes,
+		MinRequestTimeout:   time.Duration(ols.minRequestTimeout) * time.Second,
+		Authorizer:          ols.GenericAPIServer.Authorizer,
+		MaxRequestBodyBytes: ols.maxRequestBodyBytes,
 	}
 }

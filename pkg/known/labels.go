@@ -18,8 +18,7 @@ package known
 
 // label key
 const (
-	ObjectCreatedByLabel          = "k8s.jijiechen.com/created-by"
-	ObjectOwnedByDescriptionLabel = "k8s.jijiechen.com/owned-by-description"
+	ObjectCreatedByLabel = "k8s.jijiechen.com/created-by"
 
 	// the source info where this object belongs to or controlled by
 	ConfigGroupLabel     = "k8s.jijiechen.com/config.group"
@@ -27,11 +26,6 @@ const (
 	ConfigKindLabel      = "k8s.jijiechen.com/config.kind"
 	ConfigNameLabel      = "k8s.jijiechen.com/config.name"
 	ConfigNamespaceLabel = "k8s.jijiechen.com/config.namespace"
-	ConfigUIDLabel       = "k8s.jijiechen.com/config.uid"
-
-	ConfigSubscriptionUIDLabel       = "k8s.jijiechen.com/subs.uid"
-	ConfigSubscriptionNameLabel      = "k8s.jijiechen.com/subs.name"
-	ConfigSubscriptionNamespaceLabel = "k8s.jijiechen.com/subs.namespace"
 )
 
 // label value
@@ -39,5 +33,5 @@ const (
 	CredentialsAuto = "credentials-auto"
 	RBACDefaults    = "rbac-defaults"
 
-	ClusternetHubName = "clusternet-hub"
+	ExternalCrdAppName = "external-crd"
 )

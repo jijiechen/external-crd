@@ -53,11 +53,11 @@ import (
 	"k8s.io/klog/v2"
 	apiservicelisters "k8s.io/kube-aggregator/pkg/client/listers/apiregistration/v1"
 
-	"github.com/clusternet/clusternet/pkg/known"
-	"github.com/clusternet/clusternet/pkg/registry/shadow/template"
-	shadowapi "github.com/jijiechen/external-crd/pkg/apis/overlay/v1alpha1"
-	clusternet "github.com/jijiechen/external-crd/pkg/generated/clientset/versioned"
-	applisters "github.com/jijiechen/external-crd/pkg/generated/listers/apps/v1alpha1"
+	overlayapi "github.com/jijiechen/external-crd/pkg/apis/overlay/v1alpha1"
+	"github.com/jijiechen/external-crd/pkg/crdmanifests"
+	kcrd "github.com/jijiechen/external-crd/pkg/generated/clientset/versioned"
+	applisters "github.com/jijiechen/external-crd/pkg/generated/listers/kcrd/v1alpha1"
+	"github.com/jijiechen/external-crd/pkg/known"
 )
 
 type crdHandler struct {
@@ -69,10 +69,10 @@ type crdHandler struct {
 	authorizer          authorizer.Authorizer
 	serializer          runtime.NegotiatedSerializer
 
-	kubeRESTClient   restclient.Interface
-	clusternetClient *clusternet.Clientset
+	kubeRESTClient restclient.Interface
+	kcrdClient     *kcrd.Clientset
 
-	manifestLister   applisters.ManifestLister
+	manifestLister   applisters.KubernetesCrdLister
 	crdInformer      apiextensionsinformers.CustomResourceDefinitionInformer
 	apiserviceLister apiservicelisters.APIServiceLister
 
@@ -80,7 +80,7 @@ type crdHandler struct {
 
 	ws *restful.WebService
 	// Storage per CRD
-	storages map[string]*template.REST
+	storages map[string]*crdmanifests.REST
 	// Request scope per CRD
 	requestScopes           map[string]*handlers.RequestScope
 	versionDiscoveryHandler *versionDiscoveryHandler
@@ -90,17 +90,17 @@ type crdHandler struct {
 	reservedNamespace string
 }
 
-func NewCRDHandler(kubeRESTClient restclient.Interface, clusternetClient *clusternet.Clientset,
-	manifestLister applisters.ManifestLister, apiserviceLister apiservicelisters.APIServiceLister,
+func NewCRDHandler(kubeRESTClient restclient.Interface, kcrdclient *kcrd.Clientset,
+	kcrdLister applisters.KubernetesCrdLister, apiserviceLister apiservicelisters.APIServiceLister,
 	crdInformer apiextensionsinformers.CustomResourceDefinitionInformer,
 	minRequestTimeout int, maxRequestBodyBytes int64,
 	admissionControl admission.Interface, authorizer authorizer.Authorizer, serializer runtime.NegotiatedSerializer,
 	reservedNamespace string) *crdHandler {
 	r := &crdHandler{
-		rootPrefix:          path.Join(genericapiserver.APIGroupPrefix, shadowapi.SchemeGroupVersion.String()),
+		rootPrefix:          path.Join(genericapiserver.APIGroupPrefix, overlayapi.SchemeGroupVersion.String()),
 		kubeRESTClient:      kubeRESTClient,
-		clusternetClient:    clusternetClient,
-		manifestLister:      manifestLister,
+		kcrdClient:          kcrdclient,
+		manifestLister:      kcrdLister,
 		crdInformer:         crdInformer,
 		apiserviceLister:    apiserviceLister,
 		minRequestTimeout:   time.Duration(minRequestTimeout) * time.Second,
@@ -108,7 +108,7 @@ func NewCRDHandler(kubeRESTClient restclient.Interface, clusternetClient *cluste
 		admissionControl:    admissionControl,
 		authorizer:          authorizer,
 		serializer:          serializer,
-		storages:            map[string]*template.REST{},
+		storages:            map[string]*crdmanifests.REST{},
 		requestScopes:       map[string]*handlers.RequestScope{},
 		reservedNamespace:   reservedNamespace,
 	}
@@ -134,12 +134,12 @@ func (r *crdHandler) SetRootWebService(ws *restful.WebService) {
 
 	r.versionDiscoveryHandler = newVersionDiscoveryHandler(
 		r.serializer,
-		shadowapi.SchemeGroupVersion,
+		overlayapi.SchemeGroupVersion,
 		r.nonCRDAPIResources,
 	)
 
 	// update version discovery route
-	versionDiscoveryPath := fmt.Sprintf("%s/%s/", genericapiserver.APIGroupPrefix, shadowapi.SchemeGroupVersion.String())
+	versionDiscoveryPath := fmt.Sprintf("%s/%s/", genericapiserver.APIGroupPrefix, overlayapi.SchemeGroupVersion.String())
 	// before we remove routes, always set dynamicRoutes as true
 	r.ws.SetDynamicRoutes(true)
 	defer r.ws.SetDynamicRoutes(false)
@@ -165,8 +165,8 @@ func (r *crdHandler) SetRootWebService(ws *restful.WebService) {
 
 func (r *crdHandler) addCustomResourceDefinition(obj interface{}) {
 	crd := obj.(*apiextensionsv1.CustomResourceDefinition)
-	if strings.HasSuffix(crd.Spec.Group, clusternetGroupSuffix) {
-		klog.V(4).Infof("skip syncing Clusternet related CustomResourceDefinition %q", klog.KObj(crd))
+	if strings.HasSuffix(crd.Spec.Group, kcrdGroupSuffix) {
+		klog.V(4).Infof("skip syncing external-crd related CustomResourceDefinition %q", klog.KObj(crd))
 		return
 	}
 
@@ -188,8 +188,8 @@ func (r *crdHandler) updateCustomResourceDefinition(old, cur interface{}) {
 		klog.V(4).Infof("no updates on the spec of CustomResourceDefinition %s, skipping syncing", klog.KObj(oldCRD))
 		return
 	}
-	if strings.HasSuffix(newCRD.Spec.Group, clusternetGroupSuffix) {
-		klog.V(4).Infof("skip syncing Clusternet related CustomResourceDefinition %s", klog.KObj(newCRD))
+	if strings.HasSuffix(newCRD.Spec.Group, kcrdGroupSuffix) {
+		klog.V(4).Infof("skip syncing external-crd related CustomResourceDefinition %s", klog.KObj(newCRD))
 		return
 	}
 	klog.V(4).Infof("updating CustomResourceDefinition %q", klog.KObj(newCRD))
@@ -282,7 +282,7 @@ func (r *crdHandler) addStorage(crd *apiextensionsv1.CustomResourceDefinition) e
 
 	r.versionDiscoveryHandler.updateCRD(crd)
 
-	crdGroupInfo := genericapiserver.NewDefaultAPIGroupInfo(shadowapi.GroupName, Scheme, ParameterCodec, Codecs)
+	crdGroupInfo := genericapiserver.NewDefaultAPIGroupInfo(overlayapi.GroupName, Scheme, ParameterCodec, Codecs)
 	var standardSerializers []runtime.SerializerInfo
 	for _, s := range crdGroupInfo.NegotiatedSerializer.SupportedMediaTypes() {
 		if s.MediaType == runtime.ContentTypeProtobuf {
@@ -296,12 +296,12 @@ func (r *crdHandler) addStorage(crd *apiextensionsv1.CustomResourceDefinition) e
 	selfLinkPrefix := ""
 	switch crd.Spec.Scope {
 	case apiextensionsv1.ClusterScoped:
-		selfLinkPrefix = "/" + path.Join("apis", shadowapi.GroupName, shadowapi.SchemeGroupVersion.Version) + "/" + resource + "/"
+		selfLinkPrefix = "/" + path.Join("apis", overlayapi.GroupName, overlayapi.SchemeGroupVersion.Version) + "/" + resource + "/"
 	case apiextensionsv1.NamespaceScoped:
-		selfLinkPrefix = "/" + path.Join("apis", shadowapi.GroupName, shadowapi.SchemeGroupVersion.Version, "namespaces") + "/"
+		selfLinkPrefix = "/" + path.Join("apis", overlayapi.GroupName, overlayapi.SchemeGroupVersion.Version, "namespaces") + "/"
 	}
 
-	restStorage := template.NewREST(r.kubeRESTClient, r.clusternetClient, ParameterCodec, r.manifestLister, r.reservedNamespace)
+	restStorage := crdmanifests.NewREST(r.kubeRESTClient, r.kcrdClient, ParameterCodec, r.manifestLister, r.reservedNamespace)
 	restStorage.SetNamespaceScoped(crd.Spec.Scope == apiextensionsv1.NamespaceScoped)
 	restStorage.SetName(resource)
 	restStorage.SetShortNames(crd.Spec.Names.ShortNames)
@@ -319,7 +319,7 @@ func (r *crdHandler) addStorage(crd *apiextensionsv1.CustomResourceDefinition) e
 	}
 	if subResources != nil {
 		if subResources.Status != nil {
-			equivalentResourceRegistry.RegisterKindFor(groupVersionResource, "status", shadowapi.SchemeGroupVersion.WithKind(kind))
+			equivalentResourceRegistry.RegisterKindFor(groupVersionResource, "status", overlayapi.SchemeGroupVersion.WithKind(kind))
 		}
 		if subResources.Scale != nil {
 			equivalentResourceRegistry.RegisterKindFor(groupVersionResource, "scale", autoscalingv1.SchemeGroupVersion.WithKind("Scale"))
@@ -481,7 +481,7 @@ func (r *crdHandler) addStorage(crd *apiextensionsv1.CustomResourceDefinition) e
 		routeFunction := restful.RouteFunction(func(request *restful.Request, response *restful.Response) {
 			http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 				http.Error(writer,
-					fmt.Sprintf("Clusternet does not allow to %s status of %s", request.Method, kind),
+					fmt.Sprintf("external-crd does not allow to %s status of %s", request.Method, kind),
 					http.StatusMethodNotAllowed)
 			})(response.ResponseWriter, request.Request)
 		})

@@ -37,7 +37,6 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/selection"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
-	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/apimachinery/pkg/util/validation/field"
 	"k8s.io/apimachinery/pkg/watch"
 	"k8s.io/apiserver/pkg/endpoints/request"
@@ -156,10 +155,10 @@ func (r *REST) Update(ctx context.Context, name string, objInfo rest.UpdatedObje
 	// We are explicitly taking forceAllowCreate as false.
 	// TODO: forceAllowCreate could be true
 	resource, subresource := r.getResourceName()
-	if len(subresource) > 0 && !supportedSubresources.Has(subresource) {
-		// all these overlay apis are considered as templates, updating subresources, such as 'status' makes no sense.
+	if len(subresource) > 0 {
+		// all these overlay apis are considered as manifest templates, updating subresources, such as 'status' makes no sense.
 		err := errors.NewMethodNotSupported(schema.GroupResource{Group: r.group, Resource: r.name}, "")
-		err.ErrStatus.Message = fmt.Sprintf("%s are considered as templates, which make no sense to update templates' %s",
+		err.ErrStatus.Message = fmt.Sprintf("%s are considered as manifests, which make no sense to update manifests' %s",
 			resource, subresource)
 		return nil, false, err
 	}
@@ -543,7 +542,7 @@ func (r *REST) dryRunCreate(ctx context.Context, obj runtime.Object, _ rest.Vali
 	if labels == nil {
 		labels = map[string]string{}
 	}
-	labels[known.ObjectCreatedByLabel] = known.ClusternetHubName
+	labels[known.ObjectCreatedByLabel] = known.ExternalCrdAppName
 	u.SetLabels(labels)
 
 	if r.kind != "Namespace" && r.namespaced {
@@ -673,7 +672,3 @@ var _ rest.GroupVersionKindProvider = &REST{}
 var _ rest.CategoriesProvider = &REST{}
 var _ rest.ShortNamesProvider = &REST{}
 var _ rest.StandardStorage = &REST{}
-
-var supportedSubresources = sets.NewString(
-	"scale",
-)
