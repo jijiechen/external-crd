@@ -14,7 +14,31 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package known
+package utils
+
+import "time"
+
+const (
+	// KcrdSystemNamespace is the default system namespace where we place system components.
+	// This could be re-configured with flag "--leader-elect-resource-namespace"
+	KcrdSystemNamespace = "external-crd-system"
+
+	// KcrdReservedNamespace is the default namespace to store Manifest into
+	KcrdReservedNamespace = "external-crd-reserved"
+)
+
+const (
+	AppFinalizer string = "k8s.jijiechen.com/finalizer"
+)
+
+const (
+	// DefaultResync means the default resync time
+	DefaultResync = time.Hour * 12
+)
+
+const (
+	Category = "external-crd"
+)
 
 // label key
 const (

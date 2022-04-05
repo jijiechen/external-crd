@@ -19,16 +19,23 @@ package apiserver
 import (
 	"fmt"
 	"github.com/jijiechen/external-crd/pkg/crdmanifests"
+	"k8s.io/apimachinery/pkg/labels"
+	"k8s.io/apiserver/pkg/admission"
+	"k8s.io/client-go/tools/cache"
+	"path"
 	"strings"
 	"time"
 
 	autoscalingapiv1 "k8s.io/api/autoscaling/v1"
+	crdinformers "k8s.io/apiextensions-apiserver/pkg/client/informers/externalversions"
+	apiextensionsv1lister "k8s.io/apiextensions-apiserver/pkg/client/listers/apiextensions/v1"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/runtime/serializer"
+	"k8s.io/apimachinery/pkg/util/sets"
 	genericapi "k8s.io/apiserver/pkg/endpoints"
 	genericdiscovery "k8s.io/apiserver/pkg/endpoints/discovery"
 	"k8s.io/apiserver/pkg/registry/rest"
@@ -91,10 +98,17 @@ type OverlayAPIServer struct {
 	maxRequestBodyBytes int64
 	minRequestTimeout   int
 
+	// admissionControl performs deep inspection of a given request (including content)
+	// to set values and determine whether its allowed
+	admissionControl admission.Interface
+
 	kubeRESTClient restclient.Interface
 	kcrdClient     *kcrd.Clientset
 
 	kcrdLister       kcrdlisters.KubernetesCrdLister
+	crdLister        apiextensionsv1lister.CustomResourceDefinitionLister
+	crdSynced        cache.InformerSynced
+	crdHandler       *crdHandler
 	apiserviceLister apiservicelisters.APIServiceLister
 
 	// namespace where Manifests are created
@@ -102,24 +116,46 @@ type OverlayAPIServer struct {
 }
 
 func NewOverlayAPIServer(apiserver *genericapiserver.GenericAPIServer, maxRequestBodyBytes int64, minRequestTimeout int,
+	admissionControl admission.Interface,
 	kubeRESTClient restclient.Interface, kcrdClient *kcrd.Clientset, manifestLister kcrdlisters.KubernetesCrdLister,
-	apiserviceLister apiservicelisters.APIServiceLister, reservedNamespace string) *OverlayAPIServer {
+	apiserviceLister apiservicelisters.APIServiceLister, crdInformerFactory crdinformers.SharedInformerFactory,
+	reservedNamespace string) *OverlayAPIServer {
 
 	return &OverlayAPIServer{
 		GenericAPIServer:    apiserver,
 		maxRequestBodyBytes: maxRequestBodyBytes,
 		minRequestTimeout:   minRequestTimeout,
+		admissionControl:    admissionControl,
 		kubeRESTClient:      kubeRESTClient,
 		kcrdClient:          kcrdClient,
 		kcrdLister:          manifestLister,
-		apiserviceLister:    apiserviceLister,
-		reservedNamespace:   reservedNamespace,
+		crdLister:           crdInformerFactory.Apiextensions().V1().CustomResourceDefinitions().Lister(),
+		crdSynced:           crdInformerFactory.Apiextensions().V1().CustomResourceDefinitions().Informer().HasSynced,
+		crdHandler: NewCRDHandler(
+			kubeRESTClient, kcrdClient, manifestLister, apiserviceLister,
+			crdInformerFactory.Apiextensions().V1().CustomResourceDefinitions(),
+			minRequestTimeout, maxRequestBodyBytes, admissionControl, apiserver.Authorizer, apiserver.Serializer, reservedNamespace),
+		apiserviceLister:  apiserviceLister,
+		reservedNamespace: reservedNamespace,
 	}
 }
 
 func (ols *OverlayAPIServer) InstallOverlayAPIGroups(stopCh <-chan struct{}, cl discovery.DiscoveryInterface) error {
 	// Wait for all CRDs to sync before installing overlay api resources.
 	klog.V(5).Info("overlay apiserver is waiting for informer caches to sync")
+
+	cache.WaitForCacheSync(stopCh, ols.crdSynced)
+	crds, err := ols.crdLister.List(labels.Everything())
+	if err != nil {
+		return err
+	}
+	crdGroups := sets.String{}
+	for _, crd := range crds {
+		if crdGroups.Has(crd.Spec.Group) {
+			continue
+		}
+		crdGroups = crdGroups.Insert(crd.Spec.Group)
+	}
 
 	apiGroupResources, err := restmapper.GetAPIGroupResources(cl)
 	if err != nil {
@@ -145,12 +181,18 @@ func (ols *OverlayAPIServer) InstallOverlayAPIGroups(stopCh <-chan struct{}, cl 
 			continue
 		}
 
+		// skip CRDs, which will be handled by crdHandler later
+		if crdGroups.Has(apiGroupResource.Group.Name) {
+			continue
+		}
+
 		for _, apiresource := range normalizeAPIGroupResources(apiGroupResource) {
 			// register this resource to storage if the priority is the highest
 			if !canBeAddedToStorage(apiresource.Group, apiresource.Version, apiresource.Name, ols.apiserviceLister) {
 				continue
 			}
 
+			ols.crdHandler.AddNonCRDAPIResource(apiresource)
 			// register scheme for original GVK
 			Scheme.AddKnownTypeWithName(schema.GroupVersion{Group: apiGroupResource.Group.Name, Version: apiresource.Version}.WithKind(apiresource.Kind),
 				&unstructured.Unstructured{},
@@ -195,6 +237,19 @@ func (ols *OverlayAPIServer) installAPIGroups(apiGroupInfos ...*genericapiserver
 	for _, apiGroupInfo := range apiGroupInfos {
 		if err := ols.installAPIResources(genericapiserver.APIGroupPrefix, apiGroupInfo); err != nil {
 			return fmt.Errorf("unable to install api resources: %v", err)
+		}
+
+		if apiGroupInfo.PrioritizedVersions[0].String() == overlayapi.SchemeGroupVersion.String() {
+			var found bool
+			for _, ws := range ols.GenericAPIServer.Handler.GoRestfulContainer.RegisteredWebServices() {
+				if ws.RootPath() == path.Join(genericapiserver.APIGroupPrefix, overlayapi.SchemeGroupVersion.String()) {
+					ols.crdHandler.SetRootWebService(ws)
+					found = true
+				}
+			}
+			if !found {
+				klog.WarningDepth(2, fmt.Sprintf("failed to find a root WebServices for %s", overlayapi.SchemeGroupVersion))
+			}
 		}
 
 		// setup discovery

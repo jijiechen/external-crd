@@ -19,6 +19,7 @@ package apiserver
 import (
 	"errors"
 	"fmt"
+	"github.com/jijiechen/external-crd/pkg/utils"
 	"net/http"
 	"path"
 	"reflect"
@@ -57,7 +58,6 @@ import (
 	"github.com/jijiechen/external-crd/pkg/crdmanifests"
 	kcrd "github.com/jijiechen/external-crd/pkg/generated/clientset/versioned"
 	applisters "github.com/jijiechen/external-crd/pkg/generated/listers/kcrd/v1alpha1"
-	"github.com/jijiechen/external-crd/pkg/known"
 )
 
 type crdHandler struct {
@@ -118,7 +118,7 @@ func NewCRDHandler(kubeRESTClient restclient.Interface, kcrdclient *kcrd.Clients
 func (r *crdHandler) AddNonCRDAPIResource(apiResource metav1.APIResource) {
 	r.lock.Lock()
 	defer r.lock.Unlock()
-	apiResource.Categories = []string{known.Category}
+	apiResource.Categories = []string{utils.Category}
 	r.nonCRDAPIResources = append(r.nonCRDAPIResources, apiResource)
 }
 
@@ -676,7 +676,7 @@ func newVersionDiscoveryHandler(serializer runtime.NegotiatedSerializer, groupVe
 func (h *versionDiscoveryHandler) updateCRDAPIResource(apiResource metav1.APIResource) {
 	h.lock.Lock()
 	defer h.lock.Unlock()
-	apiResource.Categories = []string{known.Category}
+	apiResource.Categories = []string{utils.Category}
 
 	var index *int
 	for idx, resource := range h.crdAPIResources {

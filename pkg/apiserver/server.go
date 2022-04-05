@@ -32,7 +32,6 @@ import (
 	kcrdapi "github.com/jijiechen/external-crd/pkg/apis/kcrd/v1alpha1"
 	kcrd "github.com/jijiechen/external-crd/pkg/generated/clientset/versioned"
 	informers "github.com/jijiechen/external-crd/pkg/generated/informers/externalversions"
-	"github.com/jijiechen/external-crd/pkg/known"
 )
 
 // OverlayServer defines configuration for kcrd-hub
@@ -65,10 +64,10 @@ func NewOverlayServer(opts *OverlayServerOptions) (*OverlayServer, error) {
 	utilruntime.Must(kcrdapi.AddToScheme(scheme.Scheme))
 
 	// creates the informer factory
-	kubeInformerFactory := kubeinformers.NewSharedInformerFactory(kubeClient, known.DefaultResync)
-	kcrdInformerFactory := informers.NewSharedInformerFactory(kcrdClient, known.DefaultResync)
+	kubeInformerFactory := kubeinformers.NewSharedInformerFactory(kubeClient, utils.DefaultResync)
+	kcrdInformerFactory := informers.NewSharedInformerFactory(kcrdClient, utils.DefaultResync)
 	aggregatorInformerFactory := aggregatorinformers.NewSharedInformerFactory(aggregatorclient.
-		NewForConfigOrDie(rootClientBuilder.ConfigOrDie("kcrd-server-kube-client")), known.DefaultResync)
+		NewForConfigOrDie(rootClientBuilder.ConfigOrDie("kcrd-server-kube-client")), utils.DefaultResync)
 
 	server := &OverlayServer{
 		options:                   opts,
@@ -84,7 +83,7 @@ func NewOverlayServer(opts *OverlayServerOptions) (*OverlayServer, error) {
 
 // Run starts a new OverlayAPIServer given OverlayServerOptions
 func (s *OverlayServer) Run(ctx context.Context) error {
-	klog.Info("starting external crd server ...")
+	klog.Info("starting external crd api server ...")
 	config, err := s.options.Config()
 	if err != nil {
 		return err

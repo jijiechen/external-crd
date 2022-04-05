@@ -19,6 +19,7 @@ package apiserver
 import (
 	"fmt"
 	overlayapiserver "github.com/jijiechen/external-crd/pkg/apiserver/overlay"
+	"github.com/jijiechen/external-crd/pkg/utils"
 	crdclientset "k8s.io/apiextensions-apiserver/pkg/client/clientset/clientset"
 	crdinformers "k8s.io/apiextensions-apiserver/pkg/client/informers/externalversions"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -52,7 +53,6 @@ import (
 
 	kcrd "github.com/jijiechen/external-crd/pkg/generated/clientset/versioned"
 	informers "github.com/jijiechen/external-crd/pkg/generated/informers/externalversions"
-	"github.com/jijiechen/external-crd/pkg/known"
 )
 
 const (
@@ -83,7 +83,7 @@ type OverlayServerOptions struct {
 
 // NewOverlayServerOptions returns a new OverlayServerOptions
 func NewOverlayServerOptions() (*OverlayServerOptions, error) {
-	controllerOpts, err := NewControllerOptions("external-crd", known.KcrdSystemNamespace)
+	controllerOpts, err := NewControllerOptions("external-crd", utils.KcrdSystemNamespace)
 	if err != nil {
 		return nil, err
 	}
@@ -93,7 +93,7 @@ func NewOverlayServerOptions() (*OverlayServerOptions, error) {
 	return &OverlayServerOptions{
 		RecommendedOptions:     genericoptions.NewRecommendedOptions("fake", nil),
 		AnonymousAuthSupported: true,
-		ReservedNamespace:      known.KcrdReservedNamespace,
+		ReservedNamespace:      utils.KcrdReservedNamespace,
 		ControllerOptions:      controllerOpts,
 	}, nil
 }
@@ -293,7 +293,7 @@ func (c completedConfig) New(kubeclient *kubernetes.Clientset, kcrdclient *kcrd.
 	kcrdInformerFactory.Kcrd().V1alpha1().KubernetesCrds().Informer()
 	aggregatorInformerFactory.Apiregistration().V1().APIServices().Informer()
 
-	s.GenericAPIServer.AddPostStartHookOrDie("start-kcrd-hub-shadowapis", func(context genericapiserver.PostStartHookContext) error {
+	s.GenericAPIServer.AddPostStartHookOrDie("start-external-crd-overlay-apis", func(context genericapiserver.PostStartHookContext) error {
 		if s.GenericAPIServer != nil {
 			klog.Infof("install overlay apis...")
 			crdInformerFactory := crdinformers.NewSharedInformerFactory(
@@ -301,9 +301,12 @@ func (c completedConfig) New(kubeclient *kubernetes.Clientset, kcrdclient *kcrd.
 				5*time.Minute,
 			)
 			ss := overlayapiserver.NewOverlayAPIServer(s.GenericAPIServer, c.GenericConfig.MaxRequestBodyBytes,
-				c.GenericConfig.MinRequestTimeout, kubeclient.RESTClient(), kcrdclient,
+				c.GenericConfig.MinRequestTimeout, c.GenericConfig.AdmissionControl, kubeclient.RESTClient(),
+				kcrdclient,
 				kcrdInformerFactory.Kcrd().V1alpha1().KubernetesCrds().Lister(),
-				aggregatorInformerFactory.Apiregistration().V1().APIServices().Lister(), reservedNamespace)
+				aggregatorInformerFactory.Apiregistration().V1().APIServices().Lister(),
+				crdInformerFactory,
+				reservedNamespace)
 
 			crdInformerFactory.Start(context.StopCh)
 			return ss.InstallOverlayAPIGroups(context.StopCh, kubeclient.DiscoveryClient)

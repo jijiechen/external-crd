@@ -17,6 +17,7 @@ limitations under the License.
 package crdmanifests
 
 import (
+	"github.com/jijiechen/external-crd/pkg/utils"
 	"strings"
 	"testing"
 
@@ -24,7 +25,6 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 
 	kcrd "github.com/jijiechen/external-crd/pkg/apis/kcrd/v1alpha1"
-	"github.com/jijiechen/external-crd/pkg/known"
 )
 
 func TestTransformManifest(t *testing.T) {
@@ -43,13 +43,13 @@ func TestTransformManifest(t *testing.T) {
 				ObjectMeta: metav1.ObjectMeta{
 					Generation: 6,
 					Labels: map[string]string{
-						known.ConfigGroupLabel:     "foo",
-						known.ConfigVersionLabel:   "v1alpha1",
-						known.ConfigKindLabel:      "Bar",
-						known.ConfigNameLabel:      "boo",
-						known.ConfigNamespaceLabel: "ns1",
+						utils.ConfigGroupLabel:     "foo",
+						utils.ConfigVersionLabel:   "v1alpha1",
+						utils.ConfigKindLabel:      "Bar",
+						utils.ConfigNameLabel:      "boo",
+						utils.ConfigNamespaceLabel: "ns1",
 					},
-					Namespace:       known.KcrdReservedNamespace,
+					Namespace:       utils.KcrdReservedNamespace,
 					Name:            "bars-boo",
 					ResourceVersion: "1860247",
 					UID:             "13ff776c-1e91-4a84-b77d-6c35f3a52fed",

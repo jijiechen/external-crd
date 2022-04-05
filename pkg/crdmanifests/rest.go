@@ -20,6 +20,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/jijiechen/external-crd/pkg/utils"
 	"github.com/jijiechen/external-crd/pkg/wrappers"
 	"strings"
 	"sync"
@@ -47,7 +48,6 @@ import (
 	kcrd "github.com/jijiechen/external-crd/pkg/apis/kcrd/v1alpha1"
 	kcrdclientset "github.com/jijiechen/external-crd/pkg/generated/clientset/versioned"
 	applisters "github.com/jijiechen/external-crd/pkg/generated/listers/kcrd/v1alpha1"
-	"github.com/jijiechen/external-crd/pkg/known"
 )
 
 const (
@@ -111,11 +111,11 @@ func (r *REST) Create(ctx context.Context, obj runtime.Object, createValidation 
 	if manifest.Labels == nil {
 		manifest.Labels = map[string]string{}
 	}
-	manifest.Labels[known.ConfigGroupLabel] = r.group
-	manifest.Labels[known.ConfigVersionLabel] = r.version
-	manifest.Labels[known.ConfigKindLabel] = r.kind
-	manifest.Labels[known.ConfigNameLabel] = result.GetName()
-	manifest.Labels[known.ConfigNamespaceLabel] = result.GetNamespace()
+	manifest.Labels[utils.ConfigGroupLabel] = r.group
+	manifest.Labels[utils.ConfigVersionLabel] = r.version
+	manifest.Labels[utils.ConfigKindLabel] = r.kind
+	manifest.Labels[utils.ConfigNameLabel] = result.GetName()
+	manifest.Labels[utils.ConfigNamespaceLabel] = result.GetNamespace()
 	manifest, err = r.kcrdClient.KcrdV1alpha1().KubernetesCrds(manifest.Namespace).Create(ctx, manifest, metav1.CreateOptions{})
 	if err != nil {
 		if errors.IsAlreadyExists(err) {
@@ -197,13 +197,13 @@ func (r *REST) Update(ctx context.Context, name string, objInfo rest.UpdatedObje
 	for k, v := range result.GetLabels() {
 		manifestCopy.Labels[k] = v
 	}
-	manifestCopy.Labels[known.ConfigGroupLabel] = r.group
-	manifestCopy.Labels[known.ConfigVersionLabel] = r.version
+	manifestCopy.Labels[utils.ConfigGroupLabel] = r.group
+	manifestCopy.Labels[utils.ConfigVersionLabel] = r.version
 	if r.kind != "Scale" {
-		manifestCopy.Labels[known.ConfigKindLabel] = r.kind
+		manifestCopy.Labels[utils.ConfigKindLabel] = r.kind
 	}
-	manifestCopy.Labels[known.ConfigNameLabel] = result.GetName()
-	manifestCopy.Labels[known.ConfigNamespaceLabel] = result.GetNamespace()
+	manifestCopy.Labels[utils.ConfigNameLabel] = result.GetName()
+	manifestCopy.Labels[utils.ConfigNamespaceLabel] = result.GetNamespace()
 	manifestCopy.Manifest.Reset()
 	manifestCopy.Manifest.Object = result
 	// save the updates
@@ -436,7 +436,7 @@ func (r *REST) SetNamespaceScoped(namespaceScoped bool) {
 }
 
 func (r *REST) Categories() []string {
-	return []string{known.Category}
+	return []string{utils.Category}
 }
 
 func (r *REST) SetGroup(group string) {
@@ -542,7 +542,7 @@ func (r *REST) dryRunCreate(ctx context.Context, obj runtime.Object, _ rest.Vali
 	if labels == nil {
 		labels = map[string]string{}
 	}
-	labels[known.ObjectCreatedByLabel] = known.ExternalCrdAppName
+	labels[utils.ObjectCreatedByLabel] = utils.ExternalCrdAppName
 	u.SetLabels(labels)
 
 	if r.kind != "Namespace" && r.namespaced {
@@ -606,7 +606,7 @@ func (r *REST) convertListOptionsToLabels(ctx context.Context, options *internal
 			var selectorKey string
 			switch rqmt.Field {
 			case "metadata.name":
-				selectorKey = known.ConfigNameLabel
+				selectorKey = utils.ConfigNameLabel
 			default:
 				return nil, errors.NewInternalError(fmt.Errorf("unable to recognize selector key %s", rqmt.Field))
 			}
@@ -619,7 +619,7 @@ func (r *REST) convertListOptionsToLabels(ctx context.Context, options *internal
 	}
 
 	// apply default kind label
-	kindRequirement, err := labels.NewRequirement(known.ConfigKindLabel, selection.Equals, []string{r.kind})
+	kindRequirement, err := labels.NewRequirement(utils.ConfigKindLabel, selection.Equals, []string{r.kind})
 	if err != nil {
 		return nil, err
 	}
@@ -628,7 +628,7 @@ func (r *REST) convertListOptionsToLabels(ctx context.Context, options *internal
 	// apply default namespace label
 	namespace := request.NamespaceValue(ctx)
 	if len(namespace) > 0 {
-		nsRequirement, err := labels.NewRequirement(known.ConfigNamespaceLabel, selection.Equals, []string{namespace})
+		nsRequirement, err := labels.NewRequirement(utils.ConfigNamespaceLabel, selection.Equals, []string{namespace})
 		if err != nil {
 			return nil, err
 		}
