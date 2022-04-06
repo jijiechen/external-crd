@@ -1,1 +1,98 @@
-# todo: add deployment
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: external-crd-reserved
+
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: external-crd-system
+
+---
+kind: ServiceAccount
+apiVersion: v1
+metadata:
+  name: external-crd
+  namespace: external-crd-system
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: external-crd
+rules:
+  - apiGroups: [ "*" ]
+    resources: [ "*" ]
+    verbs: [ "*" ]
+  - nonResourceURLs: [ "*" ]
+    verbs: [ "get" ]
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: external-crd
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: external-crd
+subjects:
+  - kind: ServiceAccount
+    name: external-crd
+    namespace: external-crd-system
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: external-crd
+  namespace: external-crd-system
+spec:
+  ports:
+    - port: 443
+      protocol: TCP
+      targetPort: 443
+  selector:
+    app: external-crd
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: external-crd
+  namespace: external-crd-system
+  labels:
+    app: external-crd
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: external-crd
+  template:
+    metadata:
+      labels:
+        app: external-crd
+    spec:
+      serviceAccountName: external-crd
+      tolerations:
+        - key: node-role.kubernetes.io/master
+          operator: Exists
+      containers:
+        - name: app
+          image: ghcr.io/external-crd/external-crd:v0.8.0
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: SYSTEM_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            - name: RESERVED_NAMESPACE
+              value: external-crd-reserved
+          command:
+            - /usr/local/bin/external-crd
+            - --secure-port=443
+            - --anonymous-auth-supported=true
+            - --leader-elect-resource-namespace=$(SYSTEM_NAMESPACE)
+            - --reserved-namespace=$(RESERVED_NAMESPACE)
+            - -v=4
