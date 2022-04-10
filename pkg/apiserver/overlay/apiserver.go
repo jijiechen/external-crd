@@ -20,19 +20,24 @@ package apiserver
 import (
 	"fmt"
 	"github.com/jijiechen/external-crd/pkg/crdmanifests"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apiserver/pkg/admission"
+	"k8s.io/client-go/restmapper"
 	"k8s.io/client-go/tools/cache"
 	"path"
 	"strings"
 	"time"
 
+	overlayinstall "github.com/jijiechen/external-crd/pkg/apis/overlay/install"
+	overlayapi "github.com/jijiechen/external-crd/pkg/apis/overlay/v1alpha1"
+	kcrd "github.com/jijiechen/external-crd/pkg/generated/clientset/versioned"
+	kcrdlisters "github.com/jijiechen/external-crd/pkg/generated/listers/kcrd/v1alpha1"
 	autoscalingapiv1 "k8s.io/api/autoscaling/v1"
 	crdinformers "k8s.io/apiextensions-apiserver/pkg/client/informers/externalversions"
 	apiextensionsv1lister "k8s.io/apiextensions-apiserver/pkg/client/listers/apiextensions/v1"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/runtime/serializer"
@@ -44,15 +49,8 @@ import (
 	"k8s.io/apiserver/pkg/storageversion"
 	"k8s.io/client-go/discovery"
 	restclient "k8s.io/client-go/rest"
-	"k8s.io/client-go/restmapper"
 	"k8s.io/klog/v2"
 	apiservicelisters "k8s.io/kube-aggregator/pkg/client/listers/apiregistration/v1"
-	metricsapi "k8s.io/metrics/pkg/apis/metrics"
-
-	overlayinstall "github.com/jijiechen/external-crd/pkg/apis/overlay/install"
-	overlayapi "github.com/jijiechen/external-crd/pkg/apis/overlay/v1alpha1"
-	kcrd "github.com/jijiechen/external-crd/pkg/generated/clientset/versioned"
-	kcrdlisters "github.com/jijiechen/external-crd/pkg/generated/listers/kcrd/v1alpha1"
 )
 
 var (
@@ -164,49 +162,33 @@ func (ols *OverlayAPIServer) InstallOverlayAPIGroups(stopCh <-chan struct{}, cl 
 	}
 
 	overlayv1alpha1storage := map[string]rest.Storage{}
+	nsRESTSet := false
 	for _, apiGroupResource := range apiGroupResources {
-		// no need to duplicate xxx.kcrd.io
-		if strings.HasSuffix(apiGroupResource.Group.Name, kcrdGroupSuffix) {
-			continue
-		}
-
-		// skip overlay group to avoid getting nested
-		if apiGroupResource.Group.Name == overlayapi.GroupName {
-			continue
-		}
-
-		// ignore "metrics.k8s.io" group
-		// where PodMetrics uses pods as resource name, NodeMetrics uses nodes as resource name
-		// which conflicts with corev1.Pod and corev1.Node
-		if apiGroupResource.Group.Name == metricsapi.GroupName {
-			continue
-		}
-
-		// skip CRDs, which will be handled by crdHandler later
-		if crdGroups.Has(apiGroupResource.Group.Name) {
+		if apiGroupResource.Group.Name != "" {
 			continue
 		}
 
 		for _, apiresource := range normalizeAPIGroupResources(apiGroupResource) {
-			// register this resource to storage if the priority is the highest
-			if !canBeAddedToStorage(apiresource.Group, apiresource.Version, apiresource.Name, ols.apiserviceLister) {
-				continue
+			if apiresource.Name == "namespaces" {
+				nsRESTSet = true
+
+				Scheme.AddKnownTypeWithName(schema.GroupVersion{Group: apiGroupResource.Group.Name,
+					Version: apiresource.Version}.WithKind(apiresource.Kind), &unstructured.Unstructured{})
+
+				resourceRest := crdmanifests.NewREST(ols.kubeRESTClient, ols.kcrdClient, ParameterCodec, ols.kcrdLister, ols.reservedNamespace)
+				resourceRest.SetNamespaceScoped(apiresource.Namespaced)
+				resourceRest.SetName(apiresource.Name)
+				resourceRest.SetShortNames(apiresource.ShortNames)
+				resourceRest.SetKind(apiresource.Kind)
+				resourceRest.SetGroup(apiresource.Group)
+				resourceRest.SetVersion(apiresource.Version)
+				overlayv1alpha1storage[apiresource.Name] = resourceRest
+				break
 			}
+		}
 
-			ols.crdHandler.AddNonCRDAPIResource(apiresource)
-			// register scheme for original GVK
-			Scheme.AddKnownTypeWithName(schema.GroupVersion{Group: apiGroupResource.Group.Name, Version: apiresource.Version}.WithKind(apiresource.Kind),
-				&unstructured.Unstructured{},
-			)
-
-			resourceRest := crdmanifests.NewREST(ols.kubeRESTClient, ols.kcrdClient, ParameterCodec, ols.kcrdLister, ols.reservedNamespace)
-			resourceRest.SetNamespaceScoped(apiresource.Namespaced)
-			resourceRest.SetName(apiresource.Name)
-			resourceRest.SetShortNames(apiresource.ShortNames)
-			resourceRest.SetKind(apiresource.Kind)
-			resourceRest.SetGroup(apiresource.Group)
-			resourceRest.SetVersion(apiresource.Version)
-			overlayv1alpha1storage[apiresource.Name] = resourceRest
+		if nsRESTSet {
+			break
 		}
 	}
 

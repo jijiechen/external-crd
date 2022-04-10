@@ -297,9 +297,9 @@ func (r *crdHandler) addStorage(crd *apiextensionsv1.CustomResourceDefinition) e
 	selfLinkPrefix := ""
 	switch crd.Spec.Scope {
 	case apiextensionsv1.ClusterScoped:
-		selfLinkPrefix = "/" + path.Join("apis", overlayapi.GroupName, overlayapi.SchemeGroupVersion.Version) + "/" + resource + "/"
+		selfLinkPrefix = genericapiserver.APIGroupPrefix + "/" + path.Join(overlayapi.GroupName, overlayapi.SchemeGroupVersion.Version) + "/" + resource + "/"
 	case apiextensionsv1.NamespaceScoped:
-		selfLinkPrefix = "/" + path.Join("apis", overlayapi.GroupName, overlayapi.SchemeGroupVersion.Version, "namespaces") + "/"
+		selfLinkPrefix = genericapiserver.APIGroupPrefix + "/" + path.Join(overlayapi.GroupName, overlayapi.SchemeGroupVersion.Version, "namespaces") + "/"
 	}
 
 	restStorage := crdmanifests.NewREST(r.kubeRESTClient, r.kcrdClient, ParameterCodec, r.manifestLister, r.reservedNamespace)

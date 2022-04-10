@@ -52,10 +52,6 @@ import (
 	informers "github.com/jijiechen/external-crd/pkg/generated/informers/externalversions"
 )
 
-const (
-	openAPITitle = "external-crd"
-)
-
 // OverlayServerOptions contains state for master/api server
 type OverlayServerOptions struct {
 	// No tunnel logging by default

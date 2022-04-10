@@ -30,3 +30,7 @@ testbin/*
 # go vendor
 vendor
 
+
+apiserver.local.config
+
+
