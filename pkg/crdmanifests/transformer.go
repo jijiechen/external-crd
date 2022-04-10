@@ -40,12 +40,6 @@ func transformManifest(crdResource *appsapi.KubernetesCrd) (*unstructured.Unstru
 	result.SetFinalizers(crdResource.Finalizers)
 
 	annotations := result.GetAnnotations()
-	//if val, ok := crdResource.Annotations[known.FeedProtectionAnnotation]; ok {
-	//	if annotations == nil {
-	//		annotations = map[string]string{}
-	//	}
-	//	annotations[known.FeedProtectionAnnotation] = val
-	//}
 	result.SetAnnotations(annotations)
 
 	return result, nil

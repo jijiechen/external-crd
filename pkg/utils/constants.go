@@ -26,23 +26,14 @@ const (
 
 	// KcrdReservedNamespace is the default namespace to store Manifest into
 	KcrdReservedNamespace = "external-crd-reserved"
-)
 
-const (
-	AppFinalizer string = "k8s.jijiechen.com/finalizer"
-)
+	UsernameRandomDelimiterLength = 4
 
-const (
 	// DefaultResync means the default resync time
 	DefaultResync = time.Hour * 12
-)
 
-const (
 	Category = "external-crd"
-)
 
-// label key
-const (
 	ObjectCreatedByLabel = "k8s.jijiechen.com/created-by"
 
 	// the source info where this object belongs to or controlled by
@@ -51,12 +42,7 @@ const (
 	ConfigKindLabel      = "k8s.jijiechen.com/config.kind"
 	ConfigNameLabel      = "k8s.jijiechen.com/config.name"
 	ConfigNamespaceLabel = "k8s.jijiechen.com/config.namespace"
-)
-
-// label value
-const (
-	CredentialsAuto = "credentials-auto"
-	RBACDefaults    = "rbac-defaults"
+	ConfigClusterLabel   = "k8s.jijiechen.com/config.cluster"
 
 	ExternalCrdAppName = "external-crd"
 )

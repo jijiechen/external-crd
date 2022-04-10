@@ -20,6 +20,7 @@ package crdmanifests
 import (
 	"context"
 	"encoding/json"
+	sys_errors "errors"
 	"fmt"
 	"github.com/jijiechen/external-crd/pkg/utils"
 	"github.com/jijiechen/external-crd/pkg/wrappers"
@@ -89,53 +90,88 @@ type REST struct {
 	reservedNamespace string
 }
 
+func getClusterNamespace(username string) (string, string, bool) {
+	if len(username) == 0 {
+		return "", "", false
+	}
+
+	if !strings.HasPrefix(username, utils.KcrdSystemNamespace) {
+		return "", "", false
+	}
+
+	// name: external-crd-system:${random}-<cluster-id>-${random}-<namespaces>
+	firstIdx := len(utils.KcrdSystemNamespace) + 1
+	delimiter := username[firstIdx : firstIdx+utils.UsernameRandomDelimiterLength+1]
+
+	lastIdx := strings.LastIndex(username, delimiter)
+	// delimiter only found once
+	if lastIdx == firstIdx {
+		return "", "", false
+	}
+
+	clusterStart := firstIdx + len(delimiter)
+	clusterEnd := lastIdx - 1
+
+	return username[clusterStart:clusterEnd], username[clusterEnd+1+len(delimiter):], true
+}
+
 // Create inserts a new item into Manifest according to the unique key from the object.
 func (r *REST) Create(ctx context.Context, obj runtime.Object, createValidation rest.ValidateObjectFunc, options *metav1.CreateOptions) (runtime.Object, error) {
-	// dry-run
-	result, err := r.dryRunCreate(ctx, obj, createValidation, options)
+	clusterID, err := getUser(ctx)
 	if err != nil {
 		return nil, err
 	}
 
-	// next we create manifest to store the result
-	manifest := &kcrd.KubernetesCrd{
+	// dry-run
+	actualRes, err := r.dryRunCreate(ctx, obj, createValidation, options)
+	if err != nil {
+		return nil, err
+	}
+
+	// next we create manifest to store the actualRes
+	kcrdRes := &kcrd.KubernetesCrd{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      r.getNormalizedManifestName(result.GetNamespace(), result.GetName()),
+			Name:      r.getNormalizedManifestName(clusterID, actualRes.GetNamespace(), actualRes.GetName()),
 			Namespace: r.reservedNamespace,
-			Labels:    result.GetLabels(), // reuse labels from original object, which is useful for label selector
+			Labels:    actualRes.GetLabels(), // reuse labels from original object, which is useful for label selector
 		},
 		Manifest: runtime.RawExtension{
-			Object: result,
+			Object: actualRes,
 		},
 	}
-	// append Clusternet labels
-	if manifest.Labels == nil {
-		manifest.Labels = map[string]string{}
+
+	if kcrdRes.Labels == nil {
+		kcrdRes.Labels = map[string]string{}
 	}
-	manifest.Labels[utils.ConfigGroupLabel] = r.group
-	manifest.Labels[utils.ConfigVersionLabel] = r.version
-	manifest.Labels[utils.ConfigKindLabel] = r.kind
-	manifest.Labels[utils.ConfigNameLabel] = result.GetName()
-	manifest.Labels[utils.ConfigNamespaceLabel] = result.GetNamespace()
-	manifest, err = r.kcrdClient.KcrdV1alpha1().KubernetesCrds(manifest.Namespace).Create(ctx, manifest, metav1.CreateOptions{})
+	kcrdRes.Labels[utils.ConfigGroupLabel] = r.group
+	kcrdRes.Labels[utils.ConfigVersionLabel] = r.version
+	kcrdRes.Labels[utils.ConfigKindLabel] = r.kind
+	kcrdRes.Labels[utils.ConfigNameLabel] = actualRes.GetName()
+	kcrdRes.Labels[utils.ConfigClusterLabel] = clusterID
+	kcrdRes, err = r.kcrdClient.KcrdV1alpha1().KubernetesCrds(kcrdRes.Namespace).Create(ctx, kcrdRes, metav1.CreateOptions{})
 	if err != nil {
 		if errors.IsAlreadyExists(err) {
-			return nil, errors.NewAlreadyExists(schema.GroupResource{Group: r.group, Resource: r.name}, result.GetName())
+			return nil, errors.NewAlreadyExists(schema.GroupResource{Group: r.group, Resource: r.name}, actualRes.GetName())
 		}
 		return nil, err
 	}
-	return transformManifest(manifest)
+	return transformManifest(kcrdRes)
 }
 
 // Get retrieves the item from Manifest.
 func (r *REST) Get(ctx context.Context, name string, options *metav1.GetOptions) (runtime.Object, error) {
+	clusterID, err := getUser(ctx)
+	if err != nil {
+		return nil, err
+	}
+
 	var manifest *kcrd.KubernetesCrd
-	var err error
 	if len(options.ResourceVersion) == 0 {
-		manifest, err = r.kcrdLister.KubernetesCrds(r.reservedNamespace).Get(r.getNormalizedManifestName(request.NamespaceValue(ctx), name))
+		manifest, err = r.kcrdLister.KubernetesCrds(r.reservedNamespace).Get(
+			r.getNormalizedManifestName(clusterID, request.NamespaceValue(ctx), name))
 	} else {
 		manifest, err = r.kcrdClient.KcrdV1alpha1().KubernetesCrds(r.reservedNamespace).
-			Get(ctx, r.getNormalizedManifestName(request.NamespaceValue(ctx), name), *options)
+			Get(ctx, r.getNormalizedManifestName(clusterID, request.NamespaceValue(ctx), name), *options)
 	}
 	if err != nil {
 		if errors.IsNotFound(err) {
@@ -143,7 +179,6 @@ func (r *REST) Get(ctx context.Context, name string, options *metav1.GetOptions)
 		}
 		return nil, errors.NewInternalError(err)
 	}
-
 	return transformManifest(manifest)
 }
 
@@ -164,7 +199,12 @@ func (r *REST) Update(ctx context.Context, name string, objInfo rest.UpdatedObje
 		return nil, false, err
 	}
 
-	manifest, err := r.kcrdLister.KubernetesCrds(r.reservedNamespace).Get(r.getNormalizedManifestName(request.NamespaceValue(ctx), name))
+	clusterID, err := getUser(ctx)
+	if err != nil {
+		return nil, false, err
+	}
+	manifest, err := r.kcrdLister.KubernetesCrds(r.reservedNamespace).Get(
+		r.getNormalizedManifestName(clusterID, request.NamespaceValue(ctx), name))
 	if err != nil {
 		if errors.IsNotFound(err) {
 			return nil, false, errors.NewNotFound(schema.GroupResource{Group: r.group, Resource: r.name}, name)
@@ -220,8 +260,13 @@ func (r *REST) Update(ctx context.Context, name string, objInfo rest.UpdatedObje
 // Delete removes the item from storage.
 // options can be mutated by rest.BeforeDelete due to a graceful deletion strategy.
 func (r *REST) Delete(ctx context.Context, name string, deleteValidation rest.ValidateObjectFunc, options *metav1.DeleteOptions) (runtime.Object, bool, error) {
-	err := r.kcrdClient.KcrdV1alpha1().KubernetesCrds(r.reservedNamespace).
-		Delete(ctx, r.getNormalizedManifestName(request.NamespaceValue(ctx), name), *options)
+	clusterID, err := getUser(ctx)
+	if err != nil {
+		return nil, false, err
+	}
+
+	err = r.kcrdClient.KcrdV1alpha1().KubernetesCrds(r.reservedNamespace).
+		Delete(ctx, r.getNormalizedManifestName(clusterID, request.NamespaceValue(ctx), name), *options)
 	if err != nil {
 		if errors.IsNotFound(err) {
 			err = errors.NewNotFound(schema.GroupResource{Group: r.group, Resource: r.name}, name)
@@ -483,40 +528,36 @@ func (r *REST) normalizeRequest(req *clientgorest.Request, namespace string) *cl
 	return req
 }
 
-// getNormalizedManifestName will converge generateLegacyNameForManifest and generateNameForManifest
-func (r *REST) getNormalizedManifestName(namespace, name string) string {
-	legacyManifestName := r.generateLegacyNameForManifest(namespace, name)
-	// backward compatible
-	_, err := r.kcrdLister.KubernetesCrds(r.reservedNamespace).Get(legacyManifestName)
-	if err == nil {
-		return legacyManifestName
+func getUser(ctx context.Context) (string, error) {
+	username, ok := request.UserFrom(ctx)
+	if !ok {
+		return "", errors.NewUnauthorized("No user info provided.")
 	}
 
-	return r.generateNameForManifest(namespace, name)
+	// users are service accounts
+	// name: external-crd-system:${random}-<cluster-id>-${random}-<namespaces>
+	clusterID, authorizedNS, ok := getClusterNamespace(username.GetName())
+	if !ok {
+		return "", errors.NewForbidden(schema.GroupResource{}, "", sys_errors.New("invalid user info provided"))
+	}
+
+	actualNS := request.NamespaceValue(ctx)
+	if len(actualNS) == 0 || actualNS != authorizedNS {
+		return "", errors.NewForbidden(schema.GroupResource{}, "",
+			sys_errors.New(fmt.Sprintf("Can not operate resource in '%s'. Allowed namespace: '%s'",
+				actualNS, authorizedNS)))
+	}
+
+	return clusterID, nil
 }
 
-func (r *REST) generateNameForManifest(namespace, name string) string {
+// getNormalizedManifestName will converge generateLegacyNameForManifest and generateNameForManifest
+func (r *REST) getNormalizedManifestName(clusterid, namespace, name string) string {
 	resource, _ := r.getResourceName()
 	// resource is a word ("[a-z]([-a-z0-9]*[a-z0-9])?") without "."
 	// namespace is a word ("[a-z]([-a-z0-9]*[a-z0-9])?") without "."
 	// so we use "." for concatenation
-	if r.namespaced {
-		return fmt.Sprintf("%s.%s.%s", resource, namespace, name)
-	}
-	return fmt.Sprintf("%s.%s", resource, name)
-}
-
-// DEPRECATED
-// use hyphens for concatenation may lead to conflicts, such as
-// - resource "foos" with name "lovely-panda" in namespace "bar"
-// - resource "foos" with name "panda" in namespace "bar-lovely"
-// will map a same Manifest object with name "foos-bar-lovely-panda"
-func (r *REST) generateLegacyNameForManifest(namespace, name string) string {
-	resource, _ := r.getResourceName()
-	if r.namespaced {
-		return fmt.Sprintf("%s-%s-%s", resource, namespace, name)
-	}
-	return fmt.Sprintf("%s-%s", resource, name)
+	return fmt.Sprintf("%s.%s.%s.%s", resource, clusterid, namespace, name)
 }
 
 func (r *REST) dryRunCreate(ctx context.Context, obj runtime.Object, _ rest.ValidateObjectFunc, options *metav1.CreateOptions) (*unstructured.Unstructured, error) {
@@ -597,6 +638,11 @@ func (r *REST) trimResult(result *unstructured.Unstructured) {
 }
 
 func (r *REST) convertListOptionsToLabels(ctx context.Context, options *internalversion.ListOptions) (labels.Selector, error) {
+	clusterID, err := getUser(ctx)
+	if err != nil {
+		return nil, err
+	}
+
 	label := labels.Everything()
 	if options != nil && options.LabelSelector != nil {
 		label = options.LabelSelector
@@ -628,14 +674,17 @@ func (r *REST) convertListOptionsToLabels(ctx context.Context, options *internal
 
 	// apply default namespace label
 	namespace := request.NamespaceValue(ctx)
-	if len(namespace) > 0 {
-		nsRequirement, err := labels.NewRequirement(utils.ConfigNamespaceLabel, selection.Equals, []string{namespace})
-		if err != nil {
-			return nil, err
-		}
-		label = label.Add(*nsRequirement)
+	nsRequirement, err := labels.NewRequirement(utils.ConfigNamespaceLabel, selection.Equals, []string{namespace})
+	if err != nil {
+		return nil, err
 	}
+	label = label.Add(*nsRequirement)
 
+	clsRequirement, err := labels.NewRequirement(utils.ConfigClusterLabel, selection.Equals, []string{clusterID})
+	if err != nil {
+		return nil, err
+	}
+	label = label.Add(*clsRequirement)
 	return label, nil
 }
 

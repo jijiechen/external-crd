@@ -262,7 +262,7 @@ func (c completedConfig) New(kubeclient *kubernetes.Clientset, kcrdclient *kcrd.
 	aggregatorInformerFactory aggregatorinformers.SharedInformerFactory,
 	clientBuilder clientbuilder.ControllerClientBuilder,
 	reservedNamespace string) (*ExternalCrdAPIServer, error) {
-	genericServer, err := c.GenericConfig.New("kcrd-hub", genericapiserver.NewEmptyDelegate())
+	genericServer, err := c.GenericConfig.New("kcrd-server", genericapiserver.NewEmptyDelegate())
 	if err != nil {
 		return nil, err
 	}
