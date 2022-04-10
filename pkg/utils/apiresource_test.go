@@ -15,7 +15,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package apiserver
+package utils
 
 import (
 	"reflect"
@@ -245,7 +245,7 @@ func TestNormalizeAPIGroupResources(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := normalizeAPIGroupResources(tt.apiGroupResource); !reflect.DeepEqual(got, tt.want) {
+			if got := NormalizeAPIGroupResources(tt.apiGroupResource); !reflect.DeepEqual(got, tt.want) {
 				t.Errorf("got: %v\n, want %v\n", got, tt.want)
 			}
 		})

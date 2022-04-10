@@ -15,7 +15,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package apiserver
+package utils
 
 import (
 	"sort"
@@ -25,8 +25,8 @@ import (
 	"k8s.io/client-go/restmapper"
 )
 
-// normalizeAPIGroupResources returns resources with preferred version or highest semantic version
-func normalizeAPIGroupResources(apiGroupResource *restmapper.APIGroupResources) []metav1.APIResource {
+// NormalizeAPIGroupResources returns resources with preferred version or highest semantic version
+func NormalizeAPIGroupResources(apiGroupResource *restmapper.APIGroupResources) []metav1.APIResource {
 	var versionedResources []metav1.APIResource
 	for version, vr := range apiGroupResource.VersionedResources {
 		for _, resource := range vr {

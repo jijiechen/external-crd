@@ -37,10 +37,6 @@ type groupPriority struct {
 	groupPriorityMinimum int32
 }
 
-func getAPIService(group, version string, apiserviceLister apiservicelisters.APIServiceLister) (*apiregistrationapis.APIService, error) {
-	return apiserviceLister.Get(strings.Join([]string{version, group}, "."))
-}
-
 func canBeAddedToStorage(group, version, resourceName string, apiserviceLister apiservicelisters.APIServiceLister) bool {
 	priorityLock.Lock()
 	defer priorityLock.Unlock()
@@ -61,4 +57,8 @@ func canBeAddedToStorage(group, version, resourceName string, apiserviceLister a
 		groupPriorityMinimum: apiservice.Spec.GroupPriorityMinimum,
 	}
 	return true
+}
+
+func getAPIService(group, version string, apiserviceLister apiservicelisters.APIServiceLister) (*apiregistrationapis.APIService, error) {
+	return apiserviceLister.Get(strings.Join([]string{version, group}, "."))
 }

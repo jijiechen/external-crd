@@ -15,7 +15,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package crdmanifests
+package apiserver
 
 import (
 	"context"
@@ -23,12 +23,9 @@ import (
 	sys_errors "errors"
 	"fmt"
 	"github.com/jijiechen/external-crd/pkg/utils"
-	"github.com/jijiechen/external-crd/pkg/wrappers"
 	"strings"
 	"sync"
 
-	batchv1 "k8s.io/api/batch/v1"
-	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	apimachineryvalidation "k8s.io/apimachinery/pkg/api/validation"
@@ -228,7 +225,7 @@ func (r *REST) Update(ctx context.Context, name string, objInfo rest.UpdatedObje
 		}
 	}
 	result := newObj.(*unstructured.Unstructured)
-	r.trimResult(result)
+	trimResult(result)
 
 	// in case labels get changed
 	manifestCopy := manifest.DeepCopy()
@@ -381,7 +378,7 @@ func (r *REST) Watch(ctx context.Context, options *internalversion.ListOptions) 
 		Limit:                options.Limit,
 		Continue:             options.Continue,
 	})
-	watchWrapper := wrappers.NewWatchWrapper(ctx, watcher, func(object runtime.Object) runtime.Object {
+	watchWrapper := utils.NewWatchWrapper(ctx, watcher, func(object runtime.Object) runtime.Object {
 		// transform object here
 		if _, ok := object.(*metav1.Status); ok {
 			return object
@@ -397,7 +394,7 @@ func (r *REST) Watch(ctx context.Context, options *internalversion.ListOptions) 
 		}
 
 		return object
-	}, wrappers.DefaultWatchSize)
+	}, utils.DefaultWatchSize)
 	if err == nil {
 		go watchWrapper.Run()
 	}
@@ -538,13 +535,13 @@ func getUser(ctx context.Context) (string, error) {
 	// name: external-crd-system:${random}-<cluster-id>-${random}-<namespaces>
 	clusterID, authorizedNS, ok := getClusterNamespace(username.GetName())
 	if !ok {
-		return "", errors.NewForbidden(schema.GroupResource{}, "", sys_errors.New("invalid user info provided"))
+		return "", errors.NewForbidden(schema.GroupResource{}, "", sys_errors.New("invalid kcrd username format"))
 	}
 
 	actualNS := request.NamespaceValue(ctx)
 	if len(actualNS) == 0 || actualNS != authorizedNS {
 		return "", errors.NewForbidden(schema.GroupResource{}, "",
-			sys_errors.New(fmt.Sprintf("Can not operate resource in '%s'. Allowed namespace: '%s'",
+			sys_errors.New(fmt.Sprintf("can not operate resource in '%s'. allowed namespace: '%s'",
 				actualNS, authorizedNS)))
 	}
 
@@ -621,20 +618,8 @@ func (r *REST) dryRunCreate(ctx context.Context, obj runtime.Object, _ rest.Vali
 	}
 
 	// trim metadata
-	r.trimResult(result)
+	trimResult(result)
 	return result, nil
-}
-
-func (r *REST) trimResult(result *unstructured.Unstructured) {
-	// trim common metadata
-	trimCommonMetadata(result)
-
-	switch r.GroupVersionKind(schema.GroupVersion{}).GroupKind() {
-	case schema.GroupKind{Kind: "Job", Group: batchv1.GroupName}:
-		trimBatchJob(result)
-	case schema.GroupKind{Kind: "Service", Group: corev1.GroupName}:
-		trimCoreService(result)
-	}
 }
 
 func (r *REST) convertListOptionsToLabels(ctx context.Context, options *internalversion.ListOptions) (labels.Selector, error) {
@@ -696,6 +681,33 @@ func (r *REST) getResourceName() (string, string) {
 	}
 
 	return r.name, ""
+}
+
+func transformManifest(crdResource *kcrd.KubernetesCrd) (*unstructured.Unstructured, error) {
+	result := &unstructured.Unstructured{}
+	if err := json.Unmarshal(crdResource.Manifest.Raw, result); err != nil {
+		return nil, errors.NewInternalError(err)
+	}
+	result.SetGeneration(crdResource.Generation)
+	result.SetCreationTimestamp(crdResource.CreationTimestamp)
+	result.SetResourceVersion(crdResource.ResourceVersion)
+	result.SetUID(crdResource.UID)
+	result.SetDeletionGracePeriodSeconds(crdResource.DeletionGracePeriodSeconds)
+	result.SetDeletionTimestamp(crdResource.DeletionTimestamp)
+	result.SetFinalizers(crdResource.Finalizers)
+
+	annotations := result.GetAnnotations()
+	result.SetAnnotations(annotations)
+
+	return result, nil
+}
+
+func trimResult(result *unstructured.Unstructured) {
+	// trim common metadata
+	// metadata.uid cannot be trimmed, which will be used for checking when patching.
+	unstructured.RemoveNestedField(result.Object, "metadata", "creationTimestamp")
+	unstructured.RemoveNestedField(result.Object, "metadata", "managedFields")
+	unstructured.RemoveNestedField(result.Object, "metadata", "resourceVersion")
 }
 
 func (r *REST) getListKind() string {

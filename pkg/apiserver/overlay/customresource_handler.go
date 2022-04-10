@@ -56,7 +56,6 @@ import (
 	apiservicelisters "k8s.io/kube-aggregator/pkg/client/listers/apiregistration/v1"
 
 	overlayapi "github.com/jijiechen/external-crd/pkg/apis/overlay/v1alpha1"
-	"github.com/jijiechen/external-crd/pkg/crdmanifests"
 	kcrd "github.com/jijiechen/external-crd/pkg/generated/clientset/versioned"
 	applisters "github.com/jijiechen/external-crd/pkg/generated/listers/kcrd/v1alpha1"
 )
@@ -81,7 +80,7 @@ type crdHandler struct {
 
 	ws *restful.WebService
 	// Storage per CRD
-	storages map[string]*crdmanifests.REST
+	storages map[string]*REST
 	// Request scope per CRD
 	requestScopes           map[string]*handlers.RequestScope
 	versionDiscoveryHandler *versionDiscoveryHandler
@@ -109,7 +108,7 @@ func NewCRDHandler(kubeRESTClient restclient.Interface, kcrdclient *kcrd.Clients
 		admissionControl:    admissionControl,
 		authorizer:          authorizer,
 		serializer:          serializer,
-		storages:            map[string]*crdmanifests.REST{},
+		storages:            map[string]*REST{},
 		requestScopes:       map[string]*handlers.RequestScope{},
 		reservedNamespace:   reservedNamespace,
 	}
@@ -302,7 +301,7 @@ func (r *crdHandler) addStorage(crd *apiextensionsv1.CustomResourceDefinition) e
 		selfLinkPrefix = genericapiserver.APIGroupPrefix + "/" + path.Join(overlayapi.GroupName, overlayapi.SchemeGroupVersion.Version, "namespaces") + "/"
 	}
 
-	restStorage := crdmanifests.NewREST(r.kubeRESTClient, r.kcrdClient, ParameterCodec, r.manifestLister, r.reservedNamespace)
+	restStorage := NewREST(r.kubeRESTClient, r.kcrdClient, ParameterCodec, r.manifestLister, r.reservedNamespace)
 	restStorage.SetNamespaceScoped(crd.Spec.Scope == apiextensionsv1.NamespaceScoped)
 	restStorage.SetName(resource)
 	restStorage.SetShortNames(crd.Spec.Names.ShortNames)

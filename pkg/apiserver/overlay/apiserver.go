@@ -19,7 +19,7 @@ package apiserver
 
 import (
 	"fmt"
-	"github.com/jijiechen/external-crd/pkg/crdmanifests"
+	"github.com/jijiechen/external-crd/pkg/utils"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apiserver/pkg/admission"
@@ -168,14 +168,14 @@ func (ols *OverlayAPIServer) InstallOverlayAPIGroups(stopCh <-chan struct{}, cl 
 			continue
 		}
 
-		for _, apiresource := range normalizeAPIGroupResources(apiGroupResource) {
+		for _, apiresource := range utils.NormalizeAPIGroupResources(apiGroupResource) {
 			if apiresource.Name == "namespaces" {
 				nsRESTSet = true
 
 				Scheme.AddKnownTypeWithName(schema.GroupVersion{Group: apiGroupResource.Group.Name,
 					Version: apiresource.Version}.WithKind(apiresource.Kind), &unstructured.Unstructured{})
 
-				resourceRest := crdmanifests.NewREST(ols.kubeRESTClient, ols.kcrdClient, ParameterCodec, ols.kcrdLister, ols.reservedNamespace)
+				resourceRest := NewREST(ols.kubeRESTClient, ols.kcrdClient, ParameterCodec, ols.kcrdLister, ols.reservedNamespace)
 				resourceRest.SetNamespaceScoped(apiresource.Namespaced)
 				resourceRest.SetName(apiresource.Name)
 				resourceRest.SetShortNames(apiresource.ShortNames)
