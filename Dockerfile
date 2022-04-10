@@ -1,5 +1,5 @@
 # Build the manager binary
-FROM golang:1.16 as builder
+FROM golang:1.17-alpine3.14 as builder
 
 WORKDIR /workspace
 # Copy the Go Modules manifests
@@ -7,6 +7,8 @@ COPY go.mod go.mod
 COPY go.sum go.sum
 # cache deps before building and copying source so that we don't need to re-download as much
 # and so that source changes don't invalidate our downloaded layer
+
+ENV GOPROXY https://proxy.golang.com.cn,direct
 RUN go mod download
 
 # Copy the go source
@@ -18,9 +20,9 @@ RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -a -o external-crd cmd/main.g
 
 # Use distroless as minimal base image to package the manager binary
 # Refer to https://github.com/GoogleContainerTools/distroless for more details
-FROM gcr.io/distroless/static:nonroot
+FROM alpine:3.14
 WORKDIR /
-COPY --from=builder /workspace/external-crd .
-USER 65532:65532
+COPY --from=builder /workspace/external-crd /usr/local/bin/
+USER root
 
-ENTRYPOINT ["/external-crd"]
+ENTRYPOINT ["/usr/local/bin/external-crd"]

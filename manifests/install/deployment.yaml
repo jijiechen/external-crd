@@ -80,7 +80,7 @@ spec:
           operator: Exists
       containers:
         - name: app
-          image: ghcr.io/external-crd/external-crd:v0.8.0
+          image: jijiechen/external-crd:2022041001
           imagePullPolicy: IfNotPresent
           env:
             - name: SYSTEM_NAMESPACE
@@ -91,6 +91,7 @@ spec:
               value: external-crd-reserved
           command:
             - /usr/local/bin/external-crd
+            - --cert-dir="/tmp/certs"
             - --secure-port=443
             - --anonymous-auth-supported=true
             - --leader-elect-resource-namespace=$(SYSTEM_NAMESPACE)
