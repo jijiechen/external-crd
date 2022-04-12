@@ -92,12 +92,13 @@ func getClusterNamespace(username string) (string, string, bool) {
 		return "", "", false
 	}
 
-	if !strings.HasPrefix(username, utils.KcrdSystemNamespace) {
+	prefix := fmt.Sprintf("system:serviceaccount:%s:", utils.KcrdSystemNamespace)
+	if !strings.HasPrefix(username, prefix) {
 		return "", "", false
 	}
 
-	// name: external-crd-system:${random}-<cluster-id>-${random}-<namespaces>
-	firstIdx := len(utils.KcrdSystemNamespace) + 1
+	// name: system:serviceaccount:external-crd-system:${random}-<cluster-id>-${random}-<namespaces>
+	firstIdx := len(prefix)
 	delimiter := username[firstIdx : firstIdx+utils.UsernameRandomDelimiterLength+1]
 
 	lastIdx := strings.LastIndex(username, delimiter)

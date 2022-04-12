@@ -21,7 +21,6 @@ import (
 	"fmt"
 	"github.com/jijiechen/external-crd/pkg/utils"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apiserver/pkg/admission"
 	"k8s.io/client-go/restmapper"
 	"k8s.io/client-go/tools/cache"
@@ -33,7 +32,6 @@ import (
 	overlayapi "github.com/jijiechen/external-crd/pkg/apis/overlay/v1alpha1"
 	kcrd "github.com/jijiechen/external-crd/pkg/generated/clientset/versioned"
 	kcrdlisters "github.com/jijiechen/external-crd/pkg/generated/listers/kcrd/v1alpha1"
-	autoscalingapiv1 "k8s.io/api/autoscaling/v1"
 	crdinformers "k8s.io/apiextensions-apiserver/pkg/client/informers/externalversions"
 	apiextensionsv1lister "k8s.io/apiextensions-apiserver/pkg/client/listers/apiextensions/v1"
 	"k8s.io/apimachinery/pkg/api/meta"
@@ -41,7 +39,6 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/runtime/serializer"
-	"k8s.io/apimachinery/pkg/util/sets"
 	genericapi "k8s.io/apiserver/pkg/endpoints"
 	genericdiscovery "k8s.io/apiserver/pkg/endpoints/discovery"
 	"k8s.io/apiserver/pkg/registry/rest"
@@ -84,10 +81,6 @@ func init() {
 		&metav1.APIGroup{},
 		&metav1.APIResourceList{},
 		&metav1.List{},
-	)
-
-	Scheme.AddUnversionedTypes(autoscalingapiv1.SchemeGroupVersion,
-		&autoscalingapiv1.Scale{},
 	)
 }
 
@@ -144,17 +137,6 @@ func (ols *OverlayAPIServer) InstallOverlayAPIGroups(stopCh <-chan struct{}, cl 
 	klog.V(5).Info("overlay apiserver is waiting for informer caches to sync")
 
 	cache.WaitForCacheSync(stopCh, ols.crdSynced)
-	crds, err := ols.crdLister.List(labels.Everything())
-	if err != nil {
-		return err
-	}
-	crdGroups := sets.String{}
-	for _, crd := range crds {
-		if crdGroups.Has(crd.Spec.Group) {
-			continue
-		}
-		crdGroups = crdGroups.Insert(crd.Spec.Group)
-	}
 
 	apiGroupResources, err := restmapper.GetAPIGroupResources(cl)
 	if err != nil {
@@ -164,14 +146,9 @@ func (ols *OverlayAPIServer) InstallOverlayAPIGroups(stopCh <-chan struct{}, cl 
 	overlayv1alpha1storage := map[string]rest.Storage{}
 	nsRESTSet := false
 	for _, apiGroupResource := range apiGroupResources {
-		if apiGroupResource.Group.Name != "" {
-			continue
-		}
-
 		for _, apiresource := range utils.NormalizeAPIGroupResources(apiGroupResource) {
-			if apiresource.Name == "namespaces" {
-				nsRESTSet = true
-
+			nsRESTSet = true
+			if apiGroupResource.Group.Name != "" && apiresource.Name == "namespaces" {
 				Scheme.AddKnownTypeWithName(schema.GroupVersion{Group: apiGroupResource.Group.Name,
 					Version: apiresource.Version}.WithKind(apiresource.Kind), &unstructured.Unstructured{})
 

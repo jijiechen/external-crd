@@ -529,50 +529,6 @@ func (r *crdHandler) addStorage(crd *apiextensionsv1.CustomResourceDefinition) e
 		}()
 	}
 
-	// scale subresource
-	if subResources != nil && subResources.Scale != nil {
-		// GET: Get subresource scale.
-		func() {
-			ws := r.newWebService()
-			route := ws.GET(resourcePath + "/{name}/scale").
-				Doc("read scale of the specified " + kind).
-				Param(nameParam).
-				Operation("read" + namespaced + kind + "Scale").
-				To(r.handle)
-			if len(namespaced) > 0 {
-				route.Param(namespaceParam)
-			}
-			r.ws.Route(route)
-		}()
-
-		// PUT: Update subresource scale.
-		func() {
-			ws := r.newWebService()
-			route := ws.PUT(resourcePath + "/{name}/scale").
-				Doc("replace scale of the specified " + kind).
-				Param(nameParam).
-				Operation("replace" + namespaced + kind + "Scale").
-				To(r.handle)
-			if len(namespaced) > 0 {
-				route.Param(namespaceParam)
-			}
-			r.ws.Route(route)
-		}()
-
-		// PATCH: Partially update subresource scale
-		func() {
-			ws := r.newWebService()
-			route := ws.PATCH(resourcePath + "/{name}/scale").
-				Doc("partially update scale of the specified " + kind).
-				Param(nameParam).
-				Operation("patch" + namespaced + kind + "Scale").
-				To(r.handle)
-			if len(namespaced) > 0 {
-				route.Param(namespaceParam)
-			}
-			r.ws.Route(route)
-		}()
-	}
 	return nil
 }
 
