@@ -147,8 +147,9 @@ func (ols *OverlayAPIServer) InstallOverlayAPIGroups(stopCh <-chan struct{}, cl 
 	nsRESTSet := false
 	for _, apiGroupResource := range apiGroupResources {
 		for _, apiresource := range utils.NormalizeAPIGroupResources(apiGroupResource) {
-			nsRESTSet = true
-			if apiGroupResource.Group.Name != "" && apiresource.Name == "namespaces" {
+			if apiGroupResource.Group.Name == "" && apiresource.Name == "namespaces" {
+				nsRESTSet = true
+
 				Scheme.AddKnownTypeWithName(schema.GroupVersion{Group: apiGroupResource.Group.Name,
 					Version: apiresource.Version}.WithKind(apiresource.Kind), &unstructured.Unstructured{})
 

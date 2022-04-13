@@ -18,9 +18,9 @@ require (
 	k8s.io/controller-manager v0.23.5
 	k8s.io/klog/v2 v2.30.0
 	k8s.io/kube-aggregator v0.23.5
-	k8s.io/metrics v0.23.5
 	sigs.k8s.io/controller-tools v0.8.0
 	sigs.k8s.io/yaml v1.3.0
 )
 
-replace k8s.io/apiserver => github.com/clusternet/apiserver v0.0.0-20220224032722-ac3d780b913f
+// external-crd need this hack: https://github.com/clusternet/apimachinery/commit/6932fb9962a05e42686580c19ca052bd65c79ab9
+replace k8s.io/apimachinery => github.com/clusternet/apimachinery v0.23.0-alpha.0.0.20220224022903-dc3dec363e8c
