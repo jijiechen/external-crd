@@ -1,0 +1,5 @@
+version_info: "0"
+resources:
+  - '@type': type.googleapis.com/envoy.api.v3.RouteConfiguration
+    name: apiservers
+    virtual_hosts:

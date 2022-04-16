@@ -1,0 +1,10 @@
+{
+  "clusterId": "cls-foo",
+  "namespace": "ns-bar",
+  "apiserver": {
+    "token": "my-cool-token",
+    "host": "192.168.1.71",
+    "httpsPort": 6443
+  },
+  "externalCrdSAToken": "my-crd-token"
+}

@@ -8,17 +8,27 @@ set -e
 RANDOM_STR=$(tr -dc a-z0-9 </dev/urandom | head -c 4)
 BUSINESS_CLUSTER=$1
 BUSINESS_NAMESPACE=$2
+ORIGINAL_KUBECONFIG=$3
 
 if [ -z "${BUSINESS_CLUSTER}" ]; then
   echo "Please specify cluster id and namespace using parameters."
   exit 1
 fi
 
+if [ -z "${ORIGINAL_KUBECONFIG}" ]; then
+  echo "Please specify business cluster kubeconfig file path as parameter 3."
+  exit 1
+fi
+
+if [ ! -f "${ORIGINAL_KUBECONFIG}" ]; then
+  echo "Can't find kubeconfig to business cluster."
+  exit 1
+fi
+
 function generate_kubeconfig(){
   SA_NAME=$1
+  SA_TOKEN=$2
 
-  SECRET_NAME=$(kubectl get -n external-crd-system serviceaccount ${SA_NAME} -o jsonpath='{.secrets[].name}')
-  TOKEN=$(kubectl get -n external-crd-system secret ${SECRET_NAME} -o go-template='{{.data.token | base64decode}}' && echo)
   CA_DATA=$(kubectl config view --raw -o json | ./jq -r '.clusters[0].cluster["certificate-authority-data"]')
   TLS_SERVER_NAME=$(kubectl config view --raw -o json | ./jq -r '.clusters[0].cluster["tls-server-name"]')
   API_SERVER=$(kubectl config view --raw -o json | ./jq -r '.clusters[0].cluster.server')
@@ -48,6 +58,48 @@ users:
 DELIMITER
 }
 
+function authorize_and_setup(){
+  SA_NAME=$1
+
+  SECRET_NAME=$(kubectl get -n external-crd-system serviceaccount ${SA_NAME} -o jsonpath='{.secrets[].name}')
+  TOKEN=$(kubectl get -n external-crd-system secret ${SECRET_NAME} -o go-template='{{.data.token | base64decode}}' && echo)
+
+  generate_kubeconfig "$SA_NAME" "$TOKEN"
+
+  SERVER_ADDR=$(cat $ORIGINAL_KUBECONFIG | ./jq -r '.clusters[0].server')
+  BUSINESS_APISERVER_HOST=$(echo $SERVER_ADDR | cut -d ':' -f 1)
+  BUSINESS_APISERVER_PORT=$(echo $SERVER_ADDR | cut -d ':' -f 2)
+  if [ -z "$BUSINESS_APISERVER_PORT" ]; then
+    BUSINESS_APISERVER_PORT=443
+  fi
+  BUSINESS_APISERVER_TOKEN=$(cat $$ORIGINAL_KUBECONFIG | ./jq -r '.users[0].user.token')
+
+(
+cat << EOF
+{
+  "clusterId": "${BUSINESS_CLUSTER}",
+  "namespace": "${BUSINESS_NAMESPACE}",
+  "apiserver": {
+    "token": "${BUSINESS_APISERVER_TOKEN}",
+    "host": "${BUSINESS_APISERVER_HOST}",
+    "httpsPort": ${BUSINESS_APISERVER_PORT}
+  },
+  "externalCrdSAToken": "${TOKEN}"
+}
+EOF
+) | ./jq -r tostring |  read BIZ_JSON_RAW
+
+  kubectl get -n external-crd-system configmap/apiserver-proxy-business-config -o json > /tmp/biz-cfg.json
+  BIZ_JSON_NAME="${BUSINESS_NAMESPACE}-${BUSINESS_CLUSTER}.json"
+  BIZ_JSON=$(echo BIZ_JSON_RAW | sed 's/"/\\"/g')
+  cat /tmp/biz-cfg.json | ./jq ".data += {\"${BIZ_JSON_NAME}\":\"${BIZ_JSON}\"}" > /tmp/biz-cfg.json
+
+  kubectl apply -f /tmp/biz-cfg.json
+
+  echo "Please get your kubeconfig from:"
+  echo "./${BUSINESS_CLUSTER}-${BUSINESS_NAMESPACE}.kubeconfig"
+}
+
 SA_NAME=
 EXISTING=$(kubectl get ClusterRoleBinding "external-crd-biz-${BUSINESS_CLUSTER}-${BUSINESS_NAMESPACE}" -o Name || true)
 if [ ! -z "$EXISTING" ]; then
@@ -58,7 +110,7 @@ if [ ! -z "$EXISTING" ]; then
     sleep 1
   else
     SA_NAME=$(echo $SA_NAME | cut -d '/' -f 2)
-    generate_kubeconfig $SA_NAME
+    authorize_and_setup $SA_NAME
     exit 0
   fi
 fi
@@ -91,5 +143,5 @@ EOF
 ) | kubectl create -f -
 
 sleep 1
-generate_kubeconfig $SA_NAME
+authorize_and_setup $SA_NAME
 

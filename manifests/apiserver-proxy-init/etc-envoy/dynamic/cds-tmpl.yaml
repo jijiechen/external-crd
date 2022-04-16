@@ -1,0 +1,22 @@
+- '@type': type.googleapis.com/envoy.config.cluster.v3.Cluster
+  name: ${BUSINESS_CLUSTER}-${BUSINESS_NAMESPACE}
+  connect_timeout: 3s
+  type: LOGICAL_DNS
+  lb_policy: ROUND_ROBIN
+  load_assignment:
+    cluster_name: ${BUSINESS_CLUSTER}-${BUSINESS_NAMESPACE}
+    endpoints:
+      - lb_endpoints:
+          - endpoint:
+              address:
+                socket_address:
+                  address: ${BUSINESS_APISERVER_HOST}
+                  port_value: ${BUSINESS_APISERVER_PORT}
+  transport_socket:
+    name: envoy.transport_sockets.tls
+    typed_config:
+      "@type": type.googleapis.com/envoy.extensions.transport_sockets.tls.v3.UpstreamTlsContext
+      common_tls_context:
+        validation_context:
+          allow_expired_certificate: true
+          trust_chain_verification: ACCEPT_UNTRUSTED

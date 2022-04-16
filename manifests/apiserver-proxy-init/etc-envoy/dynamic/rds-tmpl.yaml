@@ -1,0 +1,30 @@
+  - name: ${BUSINESS_CLUSTER}-${BUSINESS_NAMESPACE}
+    routes:
+    - match:
+        uri:
+          safe_regex:
+            google_re2: { }
+            regex: "^(/apis/.+\.istio\.io/v[^/]+)/(.*)"
+        headers:
+          - authority:
+              prefix: "${BUSINESS_NAMESPACE}-${BUSINESS_CLUSTER}."
+          - authorization:
+              exact: "Bearer ${BUSINESS_APISERVER_TOKEN}"
+      regex_rewrite:
+        pattern": "^(/apis/.+\.istio\.io/v[^/]+)/(.*)",
+        substitution": "/apis/\2"
+      request_headers_to_add:
+        - append: false
+          header:
+            key: authorization
+            value: "${BUSINESS_CRDSERVER_TOKEN}"
+      route:
+        cluster: external-crd
+    - match:
+        uri:
+          prefix: /
+        headers:
+          - authority:
+              prefix: "${BUSINESS_NAMESPACE}-${BUSINESS_CLUSTER}."
+      route:
+        cluster: ${BUSINESS_CLUSTER}-${BUSINESS_NAMESPACE}

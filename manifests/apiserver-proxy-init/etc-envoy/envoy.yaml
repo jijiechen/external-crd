@@ -1,0 +1,23 @@
+node:
+  id: id_1
+  cluster: main
+admin:
+  access_log_path: /tmp/envoy_admin_access.log
+  address:
+    socket_address:
+      address: 127.0.0.1
+      port_value: "15000"
+dynamic_resources:
+  cds_config:
+    path: /etc/envoy/dynamic/cds.yaml
+  lds_config:
+    path: /etc/envoy/lds.yaml
+
+
+
+# route generic matches:
+# ^(/api/v1)/(.*)
+# `^(/apis/[^/]+/v\w+)/(.*)`
+
+# istio matches:
+# /apis/.+\.istio\.io/(v1alpha3|v1beta1)/(.*)
