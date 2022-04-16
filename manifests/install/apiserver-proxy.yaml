@@ -1,0 +1,62 @@
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: apiserver-proxy
+  namespace: external-crd-system
+spec:
+  ports:
+    - port: 443
+      protocol: TCP
+      targetPort: 443
+  selector:
+    app: apiserver-proxy
+  type: LoadBalancer
+
+---
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: apiserver-proxy
+  namespace: external-crd-system
+  labels:
+    app: apiserver-proxy
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: apiserver-proxy
+  template:
+    metadata:
+      labels:
+        app: apiserver-proxy
+    spec:
+      initContainers:
+        - name: init
+          image: jijiechen/external-crd-init:2022041001
+          imagePullPolicy: IfNotPresent
+          volumeMounts:
+            - mountPath: /etc/business
+              name: business
+            - mountPath: /etc/envoy
+              name: etc-envoy
+      containers:
+        - name: envoy
+          image: envoyproxy/envoy-alpine:v1.18-latest
+          imagePullPolicy: IfNotPresent
+          args:
+            - -l
+            - debug
+            - -c
+            - /etc/envoy/envoy.yaml
+            - -v=4
+          volumeMounts:
+            - mountPath: /etc/envoy
+              name: etc-envoy
+      volumes:
+        - name: etc-envoy
+          emptyDir: {}
+        - name: business
+          configMap:
+            name: apiserver-proxy-business-config
