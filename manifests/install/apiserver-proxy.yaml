@@ -34,7 +34,7 @@ spec:
     spec:
       initContainers:
         - name: init
-          image: jijiechen/external-crd-init:2022041001
+          image: jijiechen/external-crd-init:2022041701
           imagePullPolicy: IfNotPresent
           volumeMounts:
             - mountPath: /etc/business
@@ -43,11 +43,11 @@ spec:
               name: etc-envoy
       containers:
         - name: envoy
-          image: envoyproxy/envoy-alpine:v1.18-latest
+          image: envoyproxy/envoy:v1.18-latest
           imagePullPolicy: IfNotPresent
           args:
             - -l
-            - debug
+            - info
             - -c
             - /etc/envoy/envoy.yaml
             - -v=4

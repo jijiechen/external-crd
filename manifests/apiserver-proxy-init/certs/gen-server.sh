@@ -1,10 +1,9 @@
-#!/bin/bash
+#!/bin/sh
 
 set -e
 set +x
 
-
-TMP_DIR="/tmp/.working_$RANDOM/"
+TMP_DIR="/tmp/.working_$RANDOM"
 mkdir -p $TMP_DIR
 trap "rm -rf $TMP_DIR" EXIT TERM
 
