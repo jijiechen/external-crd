@@ -20,7 +20,7 @@ resources:
                 path: /etc/envoy/dynamic/rds.yaml
                 resource_api_version: v3
             http_filters:
-              - name: envoy.router
+              - name: envoy.filters.http.router
       transport_socket:
         name: envoy.transport_sockets.tls
         typed_config:

@@ -1,5 +1,5 @@
 version_info: "0"
 resources:
   - '@type': type.googleapis.com/envoy.config.route.v3.RouteConfiguration
-    name: apiservers
+    name: local_route
     virtual_hosts:
