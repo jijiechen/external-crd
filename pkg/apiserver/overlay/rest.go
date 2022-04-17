@@ -146,6 +146,7 @@ func (r *REST) Create(ctx context.Context, obj runtime.Object, createValidation 
 	kcrdRes.Labels[utils.ConfigKindLabel] = r.kind
 	kcrdRes.Labels[utils.ConfigNameLabel] = actualRes.GetName()
 	kcrdRes.Labels[utils.ConfigClusterLabel] = clusterID
+	kcrdRes.Labels[utils.ConfigNamespaceLabel] = actualRes.GetNamespace()
 	kcrdRes, err = r.kcrdClient.KcrdV1alpha1().KubernetesCrds(kcrdRes.Namespace).Create(ctx, kcrdRes, metav1.CreateOptions{})
 	if err != nil {
 		if errors.IsAlreadyExists(err) {
@@ -243,6 +244,7 @@ func (r *REST) Update(ctx context.Context, name string, objInfo rest.UpdatedObje
 	}
 	manifestCopy.Labels[utils.ConfigNameLabel] = result.GetName()
 	manifestCopy.Labels[utils.ConfigNamespaceLabel] = result.GetNamespace()
+	manifestCopy.Labels[utils.ConfigClusterLabel] = clusterID
 	manifestCopy.Manifest.Reset()
 	manifestCopy.Manifest.Object = result
 	// save the updates
