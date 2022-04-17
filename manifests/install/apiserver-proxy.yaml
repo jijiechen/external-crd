@@ -34,7 +34,7 @@ spec:
     spec:
       initContainers:
         - name: init
-          image: jijiechen/external-crd-init:2022041707
+          image: jijiechen/external-crd-init:2022041708
           imagePullPolicy: IfNotPresent
           volumeMounts:
             - mountPath: /etc/business
