@@ -3,12 +3,13 @@
 set -e
 
 # the debug switch
-# set -x
+set +x
 
 RANDOM_STR=$(tr -dc a-z0-9 </dev/urandom | head -c 4)
 BUSINESS_CLUSTER=$1
 BUSINESS_NAMESPACE=$2
 ORIGINAL_KUBECONFIG=$3
+PROXY_APISERVER_HOST=${PROXY_APISERVER_BASE_HOST:-kube-api-server.external-crd.com}
 
 if [ -z "${BUSINESS_CLUSTER}" ]; then
   echo "Please specify cluster id and namespace using parameters."
@@ -25,13 +26,26 @@ if [ ! -f "${ORIGINAL_KUBECONFIG}" ]; then
   exit 1
 fi
 
+# todo: support client-key-data & client-certificate-data
+BUSINESS_APISERVER_ADDR=$(kubectl --kubeconfig=$ORIGINAL_KUBECONFIG config view --raw -o json | ./jq -r '.clusters[0].cluster.server')
+if [ "${BUSINESS_APISERVER_ADDR:0:8}" != "https://" ]; then
+  echo "Only support original kube api server of https scheme."
+  exit 1
+fi
+
+BUSINESS_APISERVER_TOKEN=$(kubectl --kubeconfig=$ORIGINAL_KUBECONFIG config view --raw -o json | ./jq -r '.users[0].user.token')
+if [ "$BUSINESS_APISERVER_TOKEN" == "null" ]; then
+  echo "Only support original kube api servers using token authorization."
+  exit 1
+fi
+
 function generate_kubeconfig(){
   SA_NAME=$1
-  SA_TOKEN=$2
 
-  CA_DATA=$(kubectl config view --raw -o json | ./jq -r '.clusters[0].cluster["certificate-authority-data"]')
-  TLS_SERVER_NAME=$(kubectl config view --raw -o json | ./jq -r '.clusters[0].cluster["tls-server-name"]')
-  API_SERVER=$(kubectl config view --raw -o json | ./jq -r '.clusters[0].cluster.server')
+  # CA_DATA=$(kubectl config view --raw -o json | ./jq -r '.clusters[0].cluster["certificate-authority-data"]')
+  # TLS_SERVER_NAME=$(kubectl config view --raw -o json | ./jq -r '.clusters[0].cluster["tls-server-name"]')
+  # API_SERVER=$(kubectl config view --raw -o json | ./jq -r '.clusters[0].cluster.server')
+  API_SERVER="${BUSINESS_NAMESPACE}-${BUSINESS_CLUSTER}.${PROXY_APISERVER_HOST}"
 
 cat << DELIMITER > ./${BUSINESS_CLUSTER}-${BUSINESS_NAMESPACE}.kubeconfig
 apiVersion: v1
@@ -39,7 +53,7 @@ clusters:
 - cluster:
     # certificate-authority-data: ${CA_DATA}
     # tls-server-name: ${TLS_SERVER_NAME}
-    server: ${API_SERVER}
+    server: https://${API_SERVER}
     insecure-skip-tls-verify: true
   name: kube
 contexts:
@@ -54,7 +68,7 @@ preferences: {}
 users:
 - name: ${SA_NAME}
   user:
-    token: ${TOKEN}
+    token: ${BUSINESS_APISERVER_TOKEN}
 DELIMITER
 }
 
@@ -62,19 +76,18 @@ function authorize_and_setup(){
   SA_NAME=$1
 
   SECRET_NAME=$(kubectl get -n external-crd-system serviceaccount ${SA_NAME} -o jsonpath='{.secrets[].name}')
-  TOKEN=$(kubectl get -n external-crd-system secret ${SECRET_NAME} -o go-template='{{.data.token | base64decode}}' && echo)
+  SECRET_TOKEN=$(kubectl get -n external-crd-system secret ${SECRET_NAME} -o go-template='{{.data.token | base64decode}}' && echo)
 
-  generate_kubeconfig "$SA_NAME" "$TOKEN"
+  generate_kubeconfig $SA_NAME
 
-  SERVER_ADDR=$(cat $ORIGINAL_KUBECONFIG | ./jq -r '.clusters[0].server')
+  SERVER_ADDR=${BUSINESS_APISERVER_ADDR#https://}
   BUSINESS_APISERVER_HOST=$(echo $SERVER_ADDR | cut -d ':' -f 1)
   BUSINESS_APISERVER_PORT=$(echo $SERVER_ADDR | cut -d ':' -f 2)
   if [ -z "$BUSINESS_APISERVER_PORT" ]; then
     BUSINESS_APISERVER_PORT=443
   fi
-  BUSINESS_APISERVER_TOKEN=$(cat $$ORIGINAL_KUBECONFIG | ./jq -r '.users[0].user.token')
 
-(
+read BIZ_JSON_RAW < <((
 cat << EOF
 {
   "clusterId": "${BUSINESS_CLUSTER}",
@@ -84,15 +97,36 @@ cat << EOF
     "host": "${BUSINESS_APISERVER_HOST}",
     "httpsPort": ${BUSINESS_APISERVER_PORT}
   },
-  "externalCrdSAToken": "${TOKEN}"
+  "externalCrdSAToken": "${SECRET_TOKEN}"
 }
 EOF
-) | ./jq -r tostring |  read BIZ_JSON_RAW
+) | ./jq -r tostring )
 
-  kubectl get -n external-crd-system configmap/apiserver-proxy-business-config -o json > /tmp/biz-cfg.json
+  EXISTING_CM=$(kubectl get -n external-crd-system configmap/apiserver-proxy-business-config -o Name || true)
   BIZ_JSON_NAME="${BUSINESS_NAMESPACE}-${BUSINESS_CLUSTER}.json"
-  BIZ_JSON=$(echo BIZ_JSON_RAW | sed 's/"/\\"/g')
-  cat /tmp/biz-cfg.json | ./jq ".data += {\"${BIZ_JSON_NAME}\":\"${BIZ_JSON}\"}" > /tmp/biz-cfg.json
+  if [ ! -z "$EXISTING_CM" ]; then
+    kubectl get -n external-crd-system configmap/apiserver-proxy-business-config -o json > /tmp/biz-cfg-backup.json
+    EXISTING_KEY=$(cat /tmp/biz-cfg-backup.json  | jq -r ".data[\"${BIZ_JSON_NAME}\"]")
+
+    if [ ! -z "$EXISTING_KEY" ]; then
+      cat /tmp/biz-cfg-backup.json | ./jq -r "del(.data[\"${BIZ_JSON_NAME}\"])" > /tmp/biz-cfg-backup2.json
+      mv -f /tmp/biz-cfg-backup2.json /tmp/biz-cfg-backup.json
+    fi
+    BIZ_JSON_ESCAPED=$(echo $BIZ_JSON_RAW | sed 's/"/\\"/g')
+    cat /tmp/biz-cfg-backup.json | ./jq -r ".data += {\"${BIZ_JSON_NAME}\":\"${BIZ_JSON_ESCAPED}\"}" > /tmp/biz-cfg.json
+  else
+    echo "creating new configmap"
+cat << EOF > /tmp/biz-cfg.json
+kind: ConfigMap
+apiVersion: v1
+metadata:
+  name: apiserver-proxy-business-config
+  namespace: external-crd-system
+data:
+  ${BIZ_JSON_NAME}: |
+    ${BIZ_JSON_RAW}
+EOF
+  fi
 
   kubectl apply -f /tmp/biz-cfg.json
 
@@ -103,13 +137,14 @@ EOF
 SA_NAME=
 EXISTING=$(kubectl get ClusterRoleBinding "external-crd-biz-${BUSINESS_CLUSTER}-${BUSINESS_NAMESPACE}" -o Name || true)
 if [ ! -z "$EXISTING" ]; then
-  SA_NAME=$(kubectl get serviceaccount -n external-crd-system -o Name -l k8s.jijiechen.com/cluster=cluster-abcd -l  k8s.jijiechen.com/namespace=ns-xyz)
+  SA_NAME=$(kubectl get serviceaccount -n external-crd-system -o Name -l k8s.jijiechen.com/cluster=${BUSINESS_CLUSTER} -l  k8s.jijiechen.com/namespace=${BUSINESS_NAMESPACE})
   if [ -z "$SA_NAME" ]; then
     # service account missing... delete the cluster role binding and let it be created later
     kubectl delete ClusterRoleBinding "external-crd-biz-${BUSINESS_CLUSTER}-${BUSINESS_NAMESPACE}"
     sleep 1
   else
     SA_NAME=$(echo $SA_NAME | cut -d '/' -f 2)
+    echo "Reusing existing serviceaccount $SA_NAME"
     authorize_and_setup $SA_NAME
     exit 0
   fi

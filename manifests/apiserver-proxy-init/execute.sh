@@ -3,6 +3,8 @@
 set -e
 set +x
 
+PROXY_APISERVER_HOST=${PROXY_APISERVER_BASE_HOST:-kube-api-server.external-crd.com}
+
 # each host: <ns>-<cls>.kube-api-server.external-crd.com
 # generate certificate
 mkdir -p /tmp/working
@@ -10,7 +12,7 @@ trap "rm -rf /tmp/working" EXIT TERM
 
 echo "Generating server certificate..."
 SCRIPT_PATH="$( cd "$(dirname "$0")" >/dev/null 2>&1 ; pwd -P )"
-(cd /tmp/working && $SCRIPT_PATH/certs/gen-server.sh kube-api-server.external-crd.com)
+(cd /tmp/working && $SCRIPT_PATH/certs/gen-server.sh $PROXY_APISERVER_HOST)
 cp /tmp/working/server.* /etc/envoy/
 
 echo "Generating envoy configuration..."
