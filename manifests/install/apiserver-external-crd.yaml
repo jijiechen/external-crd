@@ -81,7 +81,7 @@ spec:
           operator: Exists
       containers:
         - name: app
-          image: jijiechen/external-crd:2022041701
+          image: jijiechen/external-crd:2022041702
           imagePullPolicy: IfNotPresent
           env:
             - name: SYSTEM_NAMESPACE
