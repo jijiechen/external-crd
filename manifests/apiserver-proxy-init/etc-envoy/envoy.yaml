@@ -10,12 +10,10 @@ admin:
 dynamic_resources:
   cds_config:
     resource_api_version: V3
-    path_config_source:
-      path: /etc/envoy/dynamic/cds.yaml
+    path: /etc/envoy/dynamic/cds.yaml
   lds_config:
     resource_api_version: V3
-    path_config_source:
-      path: /etc/envoy/lds.yaml
+    path: /etc/envoy/lds.yaml
 
 
 

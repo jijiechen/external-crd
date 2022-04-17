@@ -17,15 +17,17 @@ resources:
             rds:
               route_config_name: local_route
               config_source:
-                path_config_source:
-                  path: /etc/envoy/dynamic/rds.yaml
+                path: /etc/envoy/dynamic/rds.yaml
                 resource_api_version: v3
             http_filters:
               - name: envoy.router
-      tls_context:
-        common_tls_context:
-          tls_certificates:
-            - certificate_chain:
-                filename: "/etc/envoy/server.pem"
-              private_key:
-                filename: "/etc/envoy/server.key"
+      transport_socket:
+        name: envoy.transport_sockets.tls
+        typed_config:
+          "@type": type.googleapis.com/envoy.extensions.transport_sockets.tls.v3.DownstreamTlsContext
+          common_tls_context:
+            tls_certificates:
+              - certificate_chain:
+                  filename: "/etc/envoy/server.pem"
+                private_key:
+                  filename: "/etc/envoy/server.key"
