@@ -34,7 +34,7 @@ spec:
     spec:
       initContainers:
         - name: init
-          image: jijiechen/external-crd-init:2022041701
+          image: jijiechen/external-crd-init:2022041703
           imagePullPolicy: IfNotPresent
           volumeMounts:
             - mountPath: /etc/business
@@ -50,7 +50,6 @@ spec:
             - info
             - -c
             - /etc/envoy/envoy.yaml
-            - -v=4
           volumeMounts:
             - mountPath: /etc/envoy
               name: etc-envoy

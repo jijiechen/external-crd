@@ -19,7 +19,7 @@
             key: authorization
             value: "${BUSINESS_CRDSERVER_TOKEN}"
       route:
-        cluster: external-crd
+        cluster: external-crd-builtin.apiserver
     - match:
         uri:
           prefix: /

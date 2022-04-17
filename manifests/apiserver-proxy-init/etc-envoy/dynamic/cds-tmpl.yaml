@@ -18,5 +18,4 @@
       "@type": type.googleapis.com/envoy.extensions.transport_sockets.tls.v3.UpstreamTlsContext
       common_tls_context:
         validation_context:
-          allow_expired_certificate: true
           trust_chain_verification: ACCEPT_UNTRUSTED

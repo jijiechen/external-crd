@@ -17,6 +17,16 @@ cp /tmp/working/server.* /etc/envoy/
 
 echo "Generating envoy configuration..."
 cp -R ./etc-envoy/* /etc/envoy/
+
+rm -f /tmp/working/env
+cat << DELIMITER > /tmp/working/env
+export BUSINESS_CLUSTER="external-crd"
+export BUSINESS_NAMESPACE="builtin.apiserver"
+export BUSINESS_APISERVER_HOST="${KUBERNETES_SERVICE_HOST}"
+export BUSINESS_APISERVER_PORT="${KUBERNETES_SERVICE_PORT}"
+DELIMITER
+(source /tmp/working/env && cat ./etc-envoy/dynamic/cds-tmpl.yaml | envsubst >> /etc/envoy/dynamic/cds.yaml)
+
 for FILE in $(ls -1 /etc/business/*.json); do
   BUSINESS_CLUSTER=$(cat $FILE | ./jq -r '.clusterId')
   BUSINESS_NAMESPACE=$(cat $FILE | ./jq -r '.namespace')
