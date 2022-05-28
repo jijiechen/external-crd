@@ -6,7 +6,7 @@
         match:
           safe_regex:
             google_re2: { }
-            regex: "^(/apis?/?$"
+            regex: "^/apis?/?(\\?.*)?$"
           headers:
             - name: :authority
               prefix_match: "${BUSINESS_NAMESPACE}-${BUSINESS_CLUSTER}."
