@@ -2,6 +2,24 @@
       domains:
         - '*'
       routes:
+      - name: ${BUSINESS_CLUSTER}-${BUSINESS_NAMESPACE}-apis
+        match:
+          safe_regex:
+            google_re2: { }
+            regex: "^(/apis?/?$"
+          headers:
+            - name: :authority
+              prefix_match: "${BUSINESS_NAMESPACE}-${BUSINESS_CLUSTER}."
+            - name: authorization
+              exact_match: "Bearer ${BUSINESS_APISERVER_TOKEN}"
+        request_headers_to_add:
+          - append: false
+            header:
+              key: authorization
+              value: "Bearer ${BUSINESS_CRDSERVER_TOKEN}"
+        route:
+          timeout: 0s
+          cluster: external-crd-builtin.apiserver
       - name: ${BUSINESS_CLUSTER}-${BUSINESS_NAMESPACE}-external-crd
         match:
           safe_regex:
@@ -18,6 +36,7 @@
               key: authorization
               value: "Bearer ${BUSINESS_CRDSERVER_TOKEN}"
         route:
+          timeout: 0s
           cluster: external-crd-builtin.apiserver
           regex_rewrite:
             pattern:
@@ -31,4 +50,5 @@
             - name: :authority
               prefix_match: "${BUSINESS_NAMESPACE}-${BUSINESS_CLUSTER}."
         route:
+          timeout: 0s
           cluster: ${BUSINESS_CLUSTER}-${BUSINESS_NAMESPACE}

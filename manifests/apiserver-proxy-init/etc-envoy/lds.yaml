@@ -14,6 +14,7 @@ resources:
             stat_prefix: ingress_https
             codec_type: AUTO
             server_name: default
+            stream_idle_timeout: 600s
             rds:
               route_config_name: local_route
               config_source:
